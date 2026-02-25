@@ -1,0 +1,8 @@
+asthma_tracker_data/
+backups/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+*.log
+vps-backups/
