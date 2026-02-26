@@ -1,0 +1,18 @@
+[Unit]
+Description=Pediatric Asthma Reddit Tracker
+After=network.target
+
+[Service]
+Type=simple
+User=bctracker
+WorkingDirectory=/opt/peds-asthma-tracker
+ExecStart=/usr/bin/python3 /opt/peds-asthma-tracker/asthma_tracker_web.py
+Restart=always
+RestartSec=10
+Environment=ASTHMA_TRACKER_BACKUP_DIR=/opt/peds-asthma-tracker/backups
+Environment=ASTHMA_TRACKER_NO_PUBLISH=1
+Environment=https_proxy=http://leolhan4:TS7pXTZhXiAe3NS16ZxF@core-residential.evomi.com:1000
+Environment=http_proxy=http://leolhan4:TS7pXTZhXiAe3NS16ZxF@core-residential.evomi.com:1000
+
+[Install]
+WantedBy=multi-user.target

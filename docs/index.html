@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pediatric Asthma Reddit Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --border: #2a2d3a;
+    --text: #e1e4ed; --muted: #8b90a0;
+    --accent: #7c6ef0; --accent2: #e06090; --green: #4ade80;
+    --yellow: #f0c040; --red: #f06060; --cyan: #40d0d0;
+    --fear: #f0a040; --concordant: #4ade80; --discordant: #f06060;
+    --uncertain: #f0c040;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.5; }
+
+  header { background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 1.25rem 2rem; display: flex; align-items: center;
+    justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+  header h1 { font-size: 1.35rem; font-weight: 600; }
+  header h1 span { color: var(--accent); }
+  .controls { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
+  select, button, input[type="date"] { background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    padding: .5rem 1rem; border-radius: 8px; font-size: .875rem; cursor: pointer; }
+  input[type="date"] { cursor: text; width: 140px; }
+  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.8); }
+  button:hover { border-color: var(--accent); }
+  .preset-btn { padding: .35rem .6rem; font-size: .75rem; border-radius: 6px; }
+  .preset-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(124,110,240,0.1); }
+  .date-label { font-size: .75rem; color: var(--muted); margin-right: 2px; }
+  .updated-label { font-size: .8rem; color: var(--muted); }
+
+  main { max-width: 1280px; margin: 0 auto; padding: 1.5rem; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1rem; margin-bottom: 1.5rem; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1.1rem; }
+  .stat-card .label { font-size: .7rem; color: var(--muted); text-transform: uppercase;
+    letter-spacing: .05em; margin-bottom: .2rem; }
+  .stat-card .value { font-size: 1.6rem; font-weight: 700; }
+  .stat-card .sub { font-size: .65rem; color: var(--muted); margin-top: .1rem; }
+  .accent { color: var(--accent); } .accent2 { color: var(--accent2); }
+  .green { color: var(--green); } .yellow { color: var(--yellow); }
+  .cyan { color: var(--cyan); } .red { color: var(--red); }
+  .fear { color: var(--fear); }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1.5rem; }
+  .card h2 { font-size: .95rem; margin-bottom: 1rem; font-weight: 600; }
+  .card.full { grid-column: 1 / -1; }
+
+  .bar-row { display: flex; align-items: center; margin-bottom: .4rem; gap: .5rem; }
+  .bar-label { width: 140px; font-size: .75rem; text-align: right; flex-shrink: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-track { flex: 1; height: 20px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; transition: width .5s ease; min-width: 2px; }
+  .bar-count { width: 36px; font-size: .75rem; color: var(--muted); text-align: right; flex-shrink: 0; }
+
+  .chart-container { position: relative; height: 280px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  th { text-align: left; color: var(--muted); font-weight: 500; padding: .5rem .6rem;
+    border-bottom: 1px solid var(--border); font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; }
+  td { padding: .5rem .6rem; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  .post-link { color: var(--accent); text-decoration: none; }
+  .post-link:hover { text-decoration: underline; }
+  .empty { text-align: center; color: var(--muted); padding: 2rem 1rem; }
+  .pill { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: .65rem;
+    background: var(--bg); border: 1px solid var(--border); margin: 1px 2px; }
+  .pill.pos { border-color: var(--green); color: var(--green); }
+  .pill.neg { border-color: var(--red); color: var(--red); }
+  .pill.neu { border-color: var(--muted); color: var(--muted); }
+  .pill.effect { border-color: var(--yellow); color: var(--yellow); }
+  .pill.fear { border-color: var(--fear); color: var(--fear); }
+  .pill.peds { border-color: var(--cyan); color: var(--cyan); }
+
+  .explorer-controls { display: flex; gap: .75rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+  .post-text { font-size: .78rem; color: var(--muted); margin-top: .2rem;
+    max-height: 60px; overflow: hidden; white-space: pre-wrap; word-break: break-word; }
+  .toggle-text { color: var(--accent); cursor: pointer; font-size: .7rem; }
+
+  .heatmap { overflow-x: auto; }
+  .heatmap table { font-size: .7rem; }
+  .heatmap th { padding: .3rem .4rem; white-space: nowrap; }
+  .heatmap td { padding: .3rem .4rem; text-align: center; min-width: 32px; }
+  .heatmap .row-label { text-align: right; font-weight: 500; white-space: nowrap; }
+  .heat-cell { border-radius: 3px; min-width: 28px; display: inline-block; padding: 1px 4px; }
+
+  .sent-bar { display: flex; align-items: center; gap: .4rem; }
+  .sent-track { width: 80px; height: 12px; background: var(--bg); border-radius: 6px; overflow: hidden;
+    position: relative; }
+  .sent-fill { height: 100%; border-radius: 6px; position: absolute; top: 0; }
+  .sent-val { font-size: .7rem; width: 40px; }
+
+  .comments-section { margin-top: .5rem; padding: .5rem; background: var(--bg); border-radius: 8px; font-size: .78rem; }
+  .comment-item { padding: .4rem 0; border-bottom: 1px solid var(--border); }
+  .comment-item:last-child { border-bottom: none; }
+  .comment-meta { font-size: .65rem; color: var(--muted); }
+
+  .export-btn { background: none; border: 1px solid var(--border); color: var(--muted);
+    padding: .4rem .8rem; border-radius: 8px; font-size: .8rem; }
+  .export-btn:hover { border-color: var(--green); color: var(--green); }
+
+  .tab-bar { background:var(--surface); border-bottom:1px solid var(--border); padding:0 2rem; display:flex; }
+  .tab-btn { background:none; border:none; border-bottom:2px solid transparent; color:var(--muted);
+    padding:.75rem 1.5rem; font-size:.9rem; cursor:pointer; }
+  .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+  .tab-content { display:none; }
+  .tab-content.active { display:block; }
+  .val-card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:1rem; margin-bottom:.8rem; }
+  .val-stat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:.8rem; margin-bottom:1rem; }
+  .val-stat-card { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:.8rem; text-align:center; }
+  .val-stat-card .val-stat-value { font-size:1.5rem; font-weight:700; color:var(--accent); }
+  .val-stat-card .val-stat-label { font-size:.7rem; color:var(--muted); }
+
+  .section-title { font-size: 1.1rem; font-weight: 700; margin: 1.5rem 0 .8rem; padding-left: .5rem;
+    border-left: 3px solid var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span>Pediatric Asthma</span> &mdash; Reddit Tracker</h1>
+  <div class="controls">
+    <select id="subFilter" onchange="saveState();renderAll()">
+      <option value="">All subreddits</option>
+      <option value="Asthma">r/Asthma</option>
+      <option value="Parenting">r/Parenting</option>
+      <option value="beyondthebump">r/beyondthebump</option>
+      <option value="Mommit">r/Mommit</option>
+      <option value="daddit">r/daddit</option>
+      <option value="AskDocs">r/AskDocs</option>
+      <option value="Allergies">r/Allergies</option>
+      <option value="medical">r/medical</option>
+      <option value="Pediatrics">r/Pediatrics</option>
+      <option value="NewParents">r/NewParents</option>
+    </select>
+    <span class="date-label">From</span><input type="date" id="dateFrom" onchange="saveState();renderAll()">
+    <span class="date-label">To</span><input type="date" id="dateTo" onchange="saveState();renderAll()">
+    <button class="preset-btn" onclick="setPreset(7)" id="pre7">7d</button>
+    <button class="preset-btn" onclick="setPreset(30)" id="pre30">30d</button>
+    <button class="preset-btn" onclick="setPreset(90)" id="pre90">90d</button>
+    <button class="preset-btn" onclick="setPreset(0)" id="pre0">All</button>
+    <button class="export-btn" onclick="exportCSV()">Export CSV</button>
+    <span class="updated-label">Last updated: 2026-02-26 19:24 UTC</span>
+  </div>
+</header>
+<nav class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('dashboard')" id="tabDashboard">Dashboard</button>
+  <button class="tab-btn" onclick="switchTab('validate')" id="tabValidate">Validate</button>
+  <button class="tab-btn" onclick="switchTab('feedback')" id="tabFeedback">Feedback</button>
+</nav>
+
+<div class="tab-content active" id="dashboardTab">
+<main>
+  <div class="stats" id="statsRow"></div>
+
+  <!-- Chart 1: Medication Sentiment -->
+  <h3 class="section-title">Medication Mentions &amp; Sentiment</h3>
+  <div class="grid">
+    <div class="card"><h2>Medication Mentions</h2><div id="medBar"></div></div>
+    <div class="card"><h2>Sentiment by Medication</h2><div id="medSent"></div></div>
+    <div class="card"><h2>Fear Score by Medication</h2><div id="medFear"></div></div>
+    <div class="card full"><h2>Medication Trend (Top 5)</h2><div class="chart-container"><canvas id="medTrend"></canvas></div></div>
+  </div>
+
+  <!-- Chart 6: Singulair Deep Dive -->
+  <h3 class="section-title">Singulair / Montelukast Deep Dive</h3>
+  <div class="grid">
+    <div class="card"><h2>Behavioral Effects</h2><div id="singEffects"></div></div>
+    <div class="card"><h2>Discourse Categories</h2><div id="singDisc"></div></div>
+  </div>
+
+  <!-- Chart 2: ED Discourse -->
+  <h3 class="section-title">ED / Hospital Decision-Making</h3>
+  <div class="grid">
+    <div class="card"><h2>ED Discourse Categories</h2><div id="edBar"></div></div>
+    <div class="card"><h2>ED Discourse Trend</h2><div class="chart-container"><canvas id="edTrend"></canvas></div></div>
+  </div>
+
+  <!-- Chart 3: Treatment Beliefs -->
+  <h3 class="section-title">Treatment Beliefs &amp; Misconceptions</h3>
+  <div class="grid">
+    <div class="card full"><h2>Beliefs with Stance</h2><div id="beliefBar"></div></div>
+  </div>
+
+  <!-- Chart 4: Triggers -->
+  <h3 class="section-title">Trigger &amp; Environmental Narrative</h3>
+  <div class="grid">
+    <div class="card"><h2>Trigger Counts</h2><div id="trigBar"></div></div>
+    <div class="card"><h2>Trigger Trend</h2><div class="chart-container"><canvas id="trigTrend"></canvas></div></div>
+  </div>
+
+  <!-- Chart 5: Caregiver -->
+  <h3 class="section-title">Caregiver Emotional State</h3>
+  <div class="grid">
+    <div class="card"><h2>Caregiver Sentiment</h2><div id="careBar"></div></div>
+    <div class="card"><h2>Caregiver Trend</h2><div class="chart-container"><canvas id="careTrend"></canvas></div></div>
+  </div>
+
+  <!-- Post Explorer -->
+  <h3 class="section-title">Post Explorer</h3>
+  <div class="grid">
+    <div class="card full">
+      <div class="explorer-controls">
+        <select id="explorerType"></select>
+        <button onclick="loadPosts()">Load Posts</button>
+      </div>
+      <div class="table-wrap" id="explorerTable"><div class="empty">Select a medication and click Load Posts</div></div>
+    </div>
+  </div>
+</main>
+</div>
+
+<div class="tab-content" id="validateTab">
+<main>
+  <div style="max-width:900px;margin:0 auto;padding:2rem">
+    <div class="val-card">
+      <h2 style="margin-bottom:.5rem">Human Validation</h2>
+      <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">
+        The voting interface requires the <strong>live server</strong> (localhost:8053). This static site shows <strong>read-only validation statistics</strong> below.
+      </p>
+    </div>
+    <div class="val-card">
+      <h3 style="margin-bottom:.8rem">Validation Statistics</h3>
+      <div id="staticValStats"><div class="empty">No validation votes recorded yet</div></div>
+    </div>
+  </div>
+</main>
+</div>
+
+<div class="tab-content" id="feedbackTab">
+<main>
+  <div style="max-width:700px;margin:0 auto;padding:2rem">
+    <div class="val-card">
+      <h2 style="margin-bottom:.5rem">Feedback &amp; Suggestions</h2>
+      <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">
+        Feedback and suggestions are available on the <a href="https://asthma.hanlabnw.com" style="color:var(--accent)">live dashboard</a>.
+      </p>
+    </div>
+  </div>
+</main>
+</div>
+
+<script>
+// --- Baked-in data ---
+const RAW_POSTS = [];
+const RAW_COMMENTS = [];
+const RAW_MEDS = [];
+const RAW_EFFECTS = [];
+const RAW_BELIEFS = [];
+const RAW_ED = [];
+const RAW_TRIGGERS = [];
+const RAW_CAREGIVER = [];
+const RAW_SINGULAIR = [];
+const RAW_SING_DISC = [];
+const DB_STATS = {"total_posts":0,"total_comments":0,"total_mentions":0,"total_scrapes":0,"last_scrape":null,"avg_sentiment":null,"avg_fear":null,"subreddit_count":0,"peds_definite":0,"peds_likely":0,"error_count_24h":0};
+const VAL_STATS = {"total_votes":0};
+
+const C = ['#7c6ef0','#e06090','#4ade80','#f0a040','#40b0f0','#f06060','#a070e0','#e0c040',
+  '#50d0b0','#f080c0','#70a0f0','#c0e050','#f07050','#60d0e0','#d080f0','#a0d060','#e09070',
+  '#80b0d0','#d0a0e0','#90e070'];
+
+const stanceColors = {concordant:'#4ade80',discordant:'#f06060',uncertain:'#f0c040',unclear:'#8b90a0'};
+const trigCatColors = {environmental:'#4ade80',viral:'#f06060','non_evidence_based':'#f0a040'};
+const careCatColors = {trust:'#4ade80',frustration:'#f06060',dismissed:'#f0a040',anxiety:'#e06090',empowerment:'#7c6ef0'};
+
+// Build indexes
+const medsByPost = {};
+for (const [pid, med, cls] of RAW_MEDS) {
+  if (!medsByPost[pid]) medsByPost[pid] = [];
+  medsByPost[pid].push(med);
+}
+const effectsBySource = {};
+for (const [st, sid, eff] of RAW_EFFECTS) {
+  const k = st+':'+sid;
+  if (!effectsBySource[k]) effectsBySource[k] = [];
+  effectsBySource[k].push(eff);
+}
+const commentsByPost = {};
+for (const c of RAW_COMMENTS) {
+  if (!commentsByPost[c.post_id]) commentsByPost[c.post_id] = [];
+  commentsByPost[c.post_id].push(c);
+}
+
+let medTrendI = null, edTrendI = null, trigTrendI = null, careTrendI = null;
+
+function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+function sentPill(v) {
+  if (v==null) return '<span class="pill neu">--</span>';
+  const cls = v>0.05?'pos':v<-0.05?'neg':'neu';
+  return `<span class="pill ${cls}">${v>0?'+':''}${v.toFixed(2)}</span>`;
+}
+function fearPill(v) {
+  if (v==null) return '<span class="pill neu">--</span>';
+  return `<span class="pill fear">${v.toFixed(2)}</span>`;
+}
+function sentColor(v) { return v>0.05?'#4ade80':v<-0.05?'#f06060':'#8b90a0'; }
+function stat(label, val, cls, sub) {
+  return `<div class="stat-card"><div class="label">${label}</div><div class="value ${cls}">${val}</div>${sub?`<div class="sub">${sub}</div>`:''}</div>`;
+}
+
+function switchTab(t) {
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+  document.getElementById(t+'Tab').classList.add('active');
+  document.getElementById('tab'+t[0].toUpperCase()+t.slice(1)).classList.add('active');
+}
+
+// --- Filtering ---
+function getFilter() {
+  const fs=document.getElementById('dateFrom').value;
+  const ts=document.getElementById('dateTo').value;
+  const sub=document.getElementById('subFilter').value;
+  let df=null, dt=null;
+  if (fs) df=new Date(fs+'T00:00:00').getTime()/1000;
+  if (ts) dt=new Date(ts+'T00:00:00').getTime()/1000+86400;
+  return {dateFrom:df,dateTo:dt,sub:sub||null};
+}
+
+function filterPosts(f) {
+  return RAW_POSTS.filter(p=>{
+    if (f.dateFrom!=null && p.created_utc<f.dateFrom) return false;
+    if (f.dateTo!=null && p.created_utc>f.dateTo) return false;
+    if (f.sub && p.subreddit!==f.sub) return false;
+    return true;
+  });
+}
+
+function setPreset(n) {
+  document.querySelectorAll('.preset-btn').forEach(b=>b.classList.remove('active'));
+  if (n>0) {
+    const to=new Date(), from=new Date();
+    from.setDate(from.getDate()-n);
+    document.getElementById('dateFrom').value=from.toISOString().slice(0,10);
+    document.getElementById('dateTo').value=to.toISOString().slice(0,10);
+    const btn=document.getElementById('pre'+n);
+    if (btn) btn.classList.add('active');
+  } else {
+    document.getElementById('dateFrom').value='';
+    document.getElementById('dateTo').value='';
+    document.getElementById('pre0').classList.add('active');
+  }
+  saveState(); renderAll();
+}
+
+function saveState() {
+  const f=document.getElementById('dateFrom').value;
+  const t=document.getElementById('dateTo').value;
+  const s=document.getElementById('subFilter').value;
+  const p=[];
+  if (f) p.push('from='+f);
+  if (t) p.push('to='+t);
+  if (s) p.push('sub='+s);
+  history.replaceState(null,'',p.length?'#'+p.join('&'):'#');
+}
+
+function loadState() {
+  const h=window.location.hash.slice(1);
+  if (!h) return false;
+  const p=new URLSearchParams(h);
+  if (p.get('from')) document.getElementById('dateFrom').value=p.get('from');
+  if (p.get('to')) document.getElementById('dateTo').value=p.get('to');
+  if (p.get('sub')) document.getElementById('subFilter').value=p.get('sub');
+  return true;
+}
+
+function exportCSV() {
+  const f=getFilter();
+  const posts=filterPosts(f);
+  const pids=new Set(posts.map(p=>p.id));
+  const mc={};
+  for (const [pid,med] of RAW_MEDS) {
+    if (!pids.has(pid)) continue;
+    mc[med]=(mc[med]||0)+1;
+  }
+  const rows=Object.entries(mc).sort((a,b)=>b[1]-a[1]);
+  if (!rows.length) { alert('No data to export.'); return; }
+  let csv='Medication,Mentions\n';
+  for (const [name,cnt] of rows) csv+='"'+name+'",'+cnt+'\n';
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='asthma-tracker-'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// --- Compute functions ---
+function computeMedCounts(posts) {
+  const pids=new Set(posts.map(p=>p.id));
+  const c={};
+  for (const [pid,med] of RAW_MEDS) { if(pids.has(pid)) c[med]=(c[med]||0)+1; }
+  return Object.entries(c).sort((a,b)=>b[1]-a[1]);
+}
+
+function computeMedSentiment(posts) {
+  const pids=new Set(posts.map(p=>p.id));
+  const acc={};
+  for (const [pid,med] of RAW_MEDS) {
+    if (!pids.has(pid)) continue;
+    const post=RAW_POSTS.find(p=>p.id===pid);
+    if (!post||post.sentiment==null) continue;
+    if (!acc[med]) acc[med]={s:0,f:0,n:0,fc:0};
+    acc[med].s+=post.sentiment; acc[med].n++;
+    if (post.fear_score!=null) { acc[med].f+=post.fear_score; acc[med].fc++; }
+  }
+  return Object.entries(acc).filter(([,v])=>v.n>=1)
+    .map(([name,v])=>[name,Math.round(v.s/v.n*1000)/1000,v.n,v.fc?Math.round(v.f/v.fc*1000)/1000:null])
+    .sort((a,b)=>b[2]-a[2]);
+}
+
+function computeDailyCounts(posts, items, getDay) {
+  const pids=new Set(posts.map(p=>p.id));
+  const daily={};
+  for (const item of items) {
+    const pid=item[0]||item[1];
+    if (!pids.has(pid)) continue;
+    const post=RAW_POSTS.find(p=>p.id===pid);
+    if (!post) continue;
+    const day=new Date(post.created_utc*1000).toISOString().slice(0,10);
+    const key=getDay?getDay(item):item[1];
+    if (!daily[day]) daily[day]={};
+    daily[day][key]=(daily[day][key]||0)+1;
+  }
+  return daily;
+}
+
+function computeCategoryCounts(posts, rawData, catIdx) {
+  const pids=new Set(posts.map(p=>p.id));
+  const c={};
+  for (const r of rawData) {
+    const sid=r[1];
+    const stype=r[0];
+    let include=false;
+    if (stype==='post'&&pids.has(sid)) include=true;
+    else if (stype==='comment') {
+      const cm=RAW_COMMENTS.find(x=>x.id===sid);
+      if (cm&&pids.has(cm.post_id)) include=true;
+    }
+    if (include) { const cat=r[catIdx]; c[cat]=(c[cat]||0)+1; }
+  }
+  return Object.entries(c).sort((a,b)=>b[1]-a[1]);
+}
+
+function computeSourceDaily(posts, rawData, catIdx) {
+  const pids=new Set(posts.map(p=>p.id));
+  const daily={};
+  for (const r of rawData) {
+    const stype=r[0], sid=r[1], cat=r[catIdx];
+    let pid=null;
+    if (stype==='post'&&pids.has(sid)) pid=sid;
+    else if (stype==='comment') {
+      const cm=RAW_COMMENTS.find(x=>x.id===sid);
+      if (cm&&pids.has(cm.post_id)) pid=cm.post_id;
+    }
+    if (!pid) continue;
+    const post=RAW_POSTS.find(p=>p.id===pid);
+    if (!post) continue;
+    const day=new Date(post.created_utc*1000).toISOString().slice(0,10);
+    if (!daily[day]) daily[day]={};
+    daily[day][cat]=(daily[day][cat]||0)+1;
+  }
+  return daily;
+}
+
+// --- Render helpers ---
+function renderBarList(container, data, colors) {
+  if (!data.length) { container.innerHTML='<div class="empty">No data</div>'; return; }
+  const mx=data[0][1]||1;
+  container.innerHTML=data.map(([name,cnt],i)=>{
+    const p=(cnt/mx*100).toFixed(1);
+    const col=typeof colors==='function'?colors(name,i):(colors||C)[i%C.length];
+    return `<div class="bar-row"><div class="bar-label">${esc(name)}</div><div class="bar-track"><div class="bar-fill" style="width:${p}%;background:${col}"></div></div><div class="bar-count">${cnt}</div></div>`;
+  }).join('');
+}
+
+function renderTrend(canvasId, daily, items, chartRef) {
+  const dates=Object.keys(daily).sort();
+  const top=items.slice(0,5).map(e=>e[0]);
+  const ds=top.map((n,i)=>({label:n,data:dates.map(d=>(daily[d]||{})[n]||0),borderColor:C[i],backgroundColor:C[i]+'22',tension:.3,fill:false,pointRadius:2}));
+  if (chartRef) chartRef.destroy();
+  return new Chart(document.getElementById(canvasId),{
+    type:'line',data:{labels:dates,datasets:ds},
+    options:{responsive:true,maintainAspectRatio:false,
+      scales:{x:{ticks:{color:'#8b90a0'},grid:{color:'#2a2d3a'}},y:{beginAtZero:true,ticks:{color:'#8b90a0'},grid:{color:'#2a2d3a'}}},
+      plugins:{legend:{labels:{color:'#e1e4ed',padding:10,font:{size:11}}}}}
+  });
+}
+
+// --- Main render ---
+function renderAll() {
+  const f=getFilter();
+  const posts=filterPosts(f);
+  const pids=new Set(posts.map(p=>p.id));
+
+  // Stats row
+  const totalM=computeMedCounts(posts).reduce((s,[,c])=>s+c,0);
+  const avgSent=DB_STATS.avg_sentiment;
+  const sentStr=avgSent!=null?(avgSent>0?'+':'')+avgSent.toFixed(2):'--';
+  const sentCls=avgSent!=null?(avgSent>0.05?'green':avgSent<-0.05?'red':'yellow'):'';
+  const avgFear=DB_STATS.avg_fear;
+  const fearStr=avgFear!=null?avgFear.toFixed(2):'--';
+  const errCls=DB_STATS.error_count_24h>0?'red':'green';
+  document.getElementById('statsRow').innerHTML=[
+    stat('Posts',DB_STATS.total_posts||0,'accent',`${DB_STATS.total_scrapes||0} scrapes`),
+    stat('Comments',DB_STATS.total_comments||0,'cyan'),
+    stat('Medications (filtered)',totalM,'accent2'),
+    stat('Avg Sentiment',sentStr,sentCls),
+    stat('Avg Fear',fearStr,'fear'),
+    stat('Peds Definite',DB_STATS.peds_definite||0,'green'),
+    stat('Peds Likely',DB_STATS.peds_likely||0,'yellow'),
+    stat('Errors 24h',DB_STATS.error_count_24h||0,errCls),
+  ].join('');
+
+  // Chart 1: Medications
+  const mc=computeMedCounts(posts);
+  renderBarList(document.getElementById('medBar'),mc);
+
+  const ms=computeMedSentiment(posts);
+  const sentEl=document.getElementById('medSent');
+  sentEl.innerHTML=ms.length?ms.slice(0,15).map(([n,avg,cnt])=>{
+    const col=sentColor(avg);
+    return `<div class="bar-row"><div class="bar-label">${esc(n)}</div><div class="sent-bar"><div class="sent-track"><div class="sent-fill" style="left:50%;width:${Math.abs(avg)*50}%;${avg<0?'right:50%;left:auto;':''}background:${col}"></div></div><div class="sent-val" style="color:${col}">${avg>0?'+':''}${avg.toFixed(2)}</div></div><div class="bar-count" title="${cnt} posts">${cnt}p</div></div>`;
+  }).join(''):'<div class="empty">No sentiment data</div>';
+
+  const fearEl=document.getElementById('medFear');
+  fearEl.innerHTML=ms.length?ms.filter(([,,, f])=>f!=null).sort((a,b)=>b[3]-a[3]).slice(0,15).map(([n,,,fear])=>{
+    const p=(fear*100).toFixed(1);
+    return `<div class="bar-row"><div class="bar-label">${esc(n)}</div><div class="bar-track"><div class="bar-fill" style="width:${p}%;background:var(--fear)"></div></div><div class="bar-count">${fear.toFixed(2)}</div></div>`;
+  }).join(''):'<div class="empty">No fear data</div>';
+
+  // Medication daily trend
+  const medDaily={};
+  for (const [pid,med] of RAW_MEDS) {
+    if (!pids.has(pid)) continue;
+    const post=RAW_POSTS.find(p=>p.id===pid);
+    if (!post) continue;
+    const day=new Date(post.created_utc*1000).toISOString().slice(0,10);
+    if (!medDaily[day]) medDaily[day]={};
+    medDaily[day][med]=(medDaily[day][med]||0)+1;
+  }
+  medTrendI=renderTrend('medTrend',medDaily,mc,medTrendI);
+
+  // Explorer dropdown
+  const sel=document.getElementById('explorerType');
+  const prev=sel.value;
+  sel.innerHTML='<option value="">Select medication...</option>'+mc.map(([n])=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  if (prev) sel.value=prev;
+
+  // Chart 6: Singulair
+  const singCounts=computeCategoryCounts(posts,RAW_SINGULAIR,2);
+  renderBarList(document.getElementById('singEffects'),singCounts,()=>'#f0a040');
+
+  // Singulair discourse
+  const discCounts={};
+  for (const [pid,cat] of RAW_SING_DISC) {
+    if (pids.has(pid)) discCounts[cat]=(discCounts[cat]||0)+1;
+  }
+  const discArr=Object.entries(discCounts).sort((a,b)=>b[1]-a[1]);
+  renderBarList(document.getElementById('singDisc'),discArr,()=>'#7c6ef0');
+
+  // Chart 2: ED Discourse
+  const edCounts=computeCategoryCounts(posts,RAW_ED,2);
+  renderBarList(document.getElementById('edBar'),edCounts,()=>'#40b0f0');
+  const edDaily=computeSourceDaily(posts,RAW_ED,2);
+  edTrendI=renderTrend('edTrend',edDaily,edCounts,edTrendI);
+
+  // Chart 3: Beliefs with stance
+  const beliefCounts={};
+  const beliefStance={};
+  for (const [stype,sid,belief,stance] of RAW_BELIEFS) {
+    let include=false;
+    if (stype==='post'&&pids.has(sid)) include=true;
+    else if (stype==='comment') {
+      const cm=RAW_COMMENTS.find(x=>x.id===sid);
+      if (cm&&pids.has(cm.post_id)) include=true;
+    }
+    if (!include) continue;
+    beliefCounts[belief]=(beliefCounts[belief]||0)+1;
+    if (!beliefStance[belief]) beliefStance[belief]={};
+    const st=stance||'unclear';
+    beliefStance[belief][st]=(beliefStance[belief][st]||0)+1;
+  }
+  const beliefArr=Object.entries(beliefCounts).sort((a,b)=>b[1]-a[1]);
+  const beliefEl=document.getElementById('beliefBar');
+  if (beliefArr.length) {
+    const bmx=beliefArr[0][1]||1;
+    let stLegend='<div style="margin-bottom:.6rem;display:flex;gap:.8rem;flex-wrap:wrap;font-size:.7rem;color:var(--muted)"><strong style="color:var(--text)">Stance:</strong>';
+    for (const [s,c] of Object.entries(stanceColors)) stLegend+=`<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${c};margin-right:3px"></span>${s}</span>`;
+    stLegend+='</div>';
+    let bHtml=stLegend;
+    for (const [belief,cnt] of beliefArr) {
+      const p=(cnt/bmx*100).toFixed(1);
+      let barInner='';
+      const sd=beliefStance[belief]||{};
+      const total=Object.values(sd).reduce((s,v)=>s+v,0);
+      for (const st of ['concordant','discordant','uncertain','unclear']) {
+        if (sd[st]) {
+          const sp=(sd[st]/total*parseFloat(p)).toFixed(1);
+          barInner+=`<div style="width:${sp}%;background:${stanceColors[st]};height:100%;display:inline-block" title="${st}: ${sd[st]}"></div>`;
+        }
+      }
+      bHtml+=`<div class="bar-row"><div class="bar-label">${esc(belief)}</div><div class="bar-track" style="display:flex">${barInner}</div><div class="bar-count">${cnt}</div></div>`;
+    }
+    beliefEl.innerHTML=bHtml;
+  } else { beliefEl.innerHTML='<div class="empty">No belief data</div>'; }
+
+  // Chart 4: Triggers
+  const trigCounts=computeCategoryCounts(posts,RAW_TRIGGERS,2);
+  renderBarList(document.getElementById('trigBar'),trigCounts,(name)=>{
+    const cat=RAW_TRIGGERS.find(r=>r[2]===name);
+    return cat?trigCatColors[cat[3]]||'#40d0d0':'#40d0d0';
+  });
+  const trigDaily=computeSourceDaily(posts,RAW_TRIGGERS,2);
+  trigTrendI=renderTrend('trigTrend',trigDaily,trigCounts,trigTrendI);
+
+  // Chart 5: Caregiver
+  const careCounts=computeCategoryCounts(posts,RAW_CAREGIVER,2);
+  renderBarList(document.getElementById('careBar'),careCounts,(name)=>careCatColors[name]||'#7c6ef0');
+  const careDaily=computeSourceDaily(posts,RAW_CAREGIVER,2);
+  careTrendI=renderTrend('careTrend',careDaily,careCounts,careTrendI);
+
+  // Validation stats (static)
+  renderValStats();
+}
+
+function loadPosts() {
+  const sel=document.getElementById('explorerType');
+  const med=sel.value;
+  if (!med) return;
+  const f=getFilter();
+  const posts=filterPosts(f);
+  const pids=new Set(posts.map(p=>p.id));
+  const medPids=new Set();
+  for (const [pid,m] of RAW_MEDS) { if (m===med&&pids.has(pid)) medPids.add(pid); }
+  const matchedPosts=posts.filter(p=>medPids.has(p.id)).sort((a,b)=>(b.engagement_score||0)-(a.engagement_score||0)).slice(0,20);
+  if (!matchedPosts.length) { document.getElementById('explorerTable').innerHTML='<div class="empty">No posts found</div>'; return; }
+  let html='<table><thead><tr><th>Post</th><th>Sub</th><th>Sent</th><th>Fear</th><th>Peds</th><th>Score</th></tr></thead><tbody>';
+  for (const p of matchedPosts) {
+    const effs=(effectsBySource['post:'+p.id]||[]).map(e=>`<span class="pill effect">${esc(e)}</span>`).join('');
+    const pedsBadge=p.pediatric_confidence?`<span class="pill peds">${p.pediatric_confidence}</span>`:'';
+    html+=`<tr><td><a href="https://reddit.com${p.permalink}" target="_blank" class="post-link">${esc(p.title.slice(0,80))}</a>${effs}<div class="post-text">${esc((p.selftext||'').slice(0,200))}</div>`;
+    const cmts=commentsByPost[p.id];
+    if (cmts&&cmts.length) {
+      html+=`<div class="comments-section">`;
+      for (const c of cmts.slice(0,3)) {
+        html+=`<div class="comment-item"><div class="comment-meta">${esc(c.author||'')} &middot; ${c.score||0} pts &middot; sent:${c.sentiment!=null?c.sentiment.toFixed(2):'--'}</div><div>${esc((c.body||'').slice(0,200))}</div></div>`;
+      }
+      html+=`</div>`;
+    }
+    html+=`</td><td><span class="pill" style="border-color:var(--cyan);color:var(--cyan)">r/${esc(p.subreddit||'')}</span></td>`;
+    html+=`<td>${sentPill(p.sentiment)}</td><td>${fearPill(p.fear_score)}</td><td>${pedsBadge}</td>`;
+    html+=`<td>${(p.engagement_score||0).toFixed(1)}</td></tr>`;
+  }
+  html+='</tbody></table>';
+  document.getElementById('explorerTable').innerHTML=html;
+}
+
+function renderValStats() {
+  const el=document.getElementById('staticValStats');
+  const s=VAL_STATS;
+  if (!s||!s.total_votes) { el.innerHTML='<div class="empty">No validation votes recorded yet</div>'; return; }
+  let h='<div class="val-stat-grid">';
+  h+=`<div class="val-stat-card"><div class="val-stat-value">${s.total_votes}</div><div class="val-stat-label">Total Votes</div></div>`;
+  h+=`<div class="val-stat-card"><div class="val-stat-value">${s.unique_validators||0}</div><div class="val-stat-label">Validators</div></div>`;
+  if (s.agreement_rate!=null) h+=`<div class="val-stat-card"><div class="val-stat-value">${(s.agreement_rate*100).toFixed(1)}%</div><div class="val-stat-label">Agreement</div></div>`;
+  if (s.precision!=null) h+=`<div class="val-stat-card"><div class="val-stat-value">${(s.precision*100).toFixed(1)}%</div><div class="val-stat-label">Precision</div></div>`;
+  if (s.recall!=null) h+=`<div class="val-stat-card"><div class="val-stat-value">${(s.recall*100).toFixed(1)}%</div><div class="val-stat-label">Recall</div></div>`;
+  if (s.f1!=null) h+=`<div class="val-stat-card"><div class="val-stat-value">${(s.f1*100).toFixed(1)}%</div><div class="val-stat-label">F1 Score</div></div>`;
+  if (s.scotts_pi!=null) h+=`<div class="val-stat-card"><div class="val-stat-value">${s.scotts_pi.toFixed(3)}</div><div class="val-stat-label">Scott's Pi</div></div>`;
+  h+='</div>';
+  el.innerHTML=h;
+}
+
+if (!loadState()) setPreset(0); else renderAll();
+</script>
+</body>
+</html>

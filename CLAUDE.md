@@ -4,7 +4,8 @@
 Scrapes **10 subreddits** for pediatric asthma discussions, identifies mentions of ~35 asthma medications (in 8 classes), ~20 side effects, ~10 treatment beliefs/misconceptions (with stance classification against NAEPP/GINA guidelines), ED/hospital decision-making discourse (4 categories), ~19 environmental/viral/non-evidence-based triggers, caregiver emotional state (5 categories), and Singulair/montelukast behavioral effects (9 effects + 4 discourse categories). Uses two-stage content gating (asthma gate + pediatric gate), keyword-based sentiment with a fear/anxiety dimension, stores everything in SQLite, and serves a web dashboard with charts, heatmaps, and a post/comment explorer. Medication mentions counted at **post level only**.
 
 ## Project status
-**Phase 1 IN PROGRESS** — project scaffold created, plan finalized, `asthma_tracker.py` needs to be written.
+**Phase 1 COMPLETE** — `asthma_tracker.py` built (2332 lines). All regex dicts, two-stage content gate, sentiment + fear scoring, 17-table DB schema, query functions, validation system, Reddit scraping, backup, CLI.
+**Phase 2 NEXT** — `asthma_tracker_web.py` (web server + dashboard).
 
 ## Architecture (mirrors bc-tracker at ~/bc-tracker/)
 - **3 Python files**: `asthma_tracker.py` (core), `asthma_tracker_web.py` (web server), `generate_site.py` (static site)
@@ -195,17 +196,17 @@ This project mirrors the architecture of `~/bc-tracker/` (Reddit Contraceptive T
 - `~/bc-tracker/generate_site.py` (1527 lines) — static site patterns
 
 ## Implementation phases
-### Phase 1: Core Tracker (`asthma_tracker.py`) — IN PROGRESS
+### Phase 1: Core Tracker (`asthma_tracker.py`) — COMPLETE
 All regex dicts, sentiment + fear scoring, DB schema, query functions, validation system, Reddit scraping, backup, CLI.
 
-### Phase 2: Web Dashboard (`asthma_tracker_web.py`)
-Scheduler, API endpoints, dark-theme Chart.js dashboard with all 6 modules, validate tab, feedback tab.
+### Phase 2: Web Dashboard (`asthma_tracker_web.py`) — COMPLETE
+Scheduler (6h auto-scrape), ~30 GET + 6 POST API endpoints, dark-theme Chart.js dashboard with all 6 modules, post explorer, validate tab (3 facets), feedback tab. 1208 lines.
 
-### Phase 3: Static Site + Deploy (`generate_site.py`, `deploy.sh`, etc.)
-GitHub Pages, VPS deployment, Caddy config.
+### Phase 3: Static Site + Deploy Scripts — COMPLETE
+`generate_site.py` (894 lines): bakes raw data into self-contained `docs/index.html` with client-side filtering (date range + subreddit), all 6 chart modules, post explorer, validation stats, CSV export. `deploy.sh`, `vps-setup.sh`, `peds-asthma-tracker.service` for VPS deployment.
 
 ### Phase 4: VPS Deployment
-`/opt/peds-asthma-tracker/`, systemd service, `asthma.hanlabnw.com`.
+`/opt/peds-asthma-tracker/`, systemd service, `asthma.hanlabnw.com`. Ready to deploy.
 
 ## How to run (once built)
 ```bash
@@ -221,3 +222,6 @@ Tell Claude: "Continue building peds-asthma-tracker. Read CLAUDE.md and the plan
 
 ## History
 - **2026-02-25** — Project created. Plan finalized with 6 dashboard modules, 17 DB tables, 10 subreddits, two-stage content gate, fear dimension, Singulair deep dive, human validation framework. Scaffold + CLAUDE.md committed.
+- **2026-02-26** — Phase 1 complete: `asthma_tracker.py` (2332 lines). All regex patterns (35 medications, 20 side effects, 10 treatment beliefs, 4 ED categories, 19 triggers, 5 caregiver categories, 9 Singulair effects, 4 Singulair discourse). Two-stage content gate (asthma gate + pediatric gate). Sentiment + fear scoring. 17-table SQLite DB. All query functions with date/subreddit filtering. 3-facet validation system (beliefs, side effects, sentiment). Reddit scraping with crosspost dedup. Backup + CLI.
+- **2026-02-26** — Phase 2 complete: `asthma_tracker_web.py` (1208 lines). Scheduler, ~30 API endpoints, embedded HTML/CSS/JS dashboard with 6 chart modules, post explorer, validate tab, feedback tab. Port 8053.
+- **2026-02-26** — Phase 3 complete: `generate_site.py` (894 lines) bakes raw data into self-contained `docs/index.html` with client-side filtering. `deploy.sh`, `vps-setup.sh`, `peds-asthma-tracker.service` for VPS deployment.
