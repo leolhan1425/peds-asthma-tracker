@@ -102,9 +102,11 @@ _AUTO_PEDIATRIC_SUBS = {s["name"].lower() for s in SUBREDDITS if s.get("auto_ped
 ASTHMA_GATE_PATTERN = re.compile(
     r'\basthma(?:tic)?\b|\binhaler[s]?\b|\bnebulizer[s]?\b|\bnebuliser[s]?\b'
     r'|\bwheezing\b|\bwheeze[sd]?\b|\bbronchospasm\b|\bbronchodilat\w*\b'
-    r'|\balbuterol\b|\bventolin\b|\bproair\b|\bflovent\b|\bpulmicort\b'
+    r'|\balbuterol\b|\bsalbutamol\b|\bventolin\b|\bproair\b|\bflovent\b|\bpulmicort\b'
     r'|\bqvar\b|\bsingulair\b|\bmontelukast\b|\bdupixent\b|\bxolair\b'
     r'|\badvair\b|\bsymbicort\b|\bbreo\b|\bbudesonide\b|\bfluticasone\b'
+    r'|\barmonair\b|\bwixela\b|\bairsupra\b|\bbreyna\b|\bpediapred\b'
+    r'|\bxopenex\b|\blevalbuterol\b|\bnucala\b|\bfasenra\b|\btezspire\b'
     r'|\bpeak\s*flow\b|\bpulse\s*ox\w*\b|\brescue\s*inhaler\b'
     r'|\bcontroller\s*(?:med|medication|inhaler)\b|\bsteroid\s*inhaler\b'
     r'|\bspacer\b|\brespiratory\s*(?:distress|infection|issue|problem)\b',
@@ -168,28 +170,27 @@ def extract_child_age(text: str) -> Optional[str]:
 
 MEDICATIONS = {
     # ICS (Inhaled Corticosteroids)
-    "Flovent": r"\bflovent\b|\bfluticasone\s*propionate\b",
+    "Flovent": r"\bflovent\b|\bfluticasone\s*propionate\b|\barmonair\b",
     "QVAR": r"\bqvar\b",
-    "Pulmicort": r"\bpulmicort\b",
+    "Pulmicort": r"\bpulmicort\b|\bpulmicort\s*(?:respules|flexhaler)\b",
     "Alvesco": r"\balvesco\b|\bciclesonide\b",
-    "Asmanex": r"\basmanex\b|\bmometasone\b",
-    "Arnuity": r"\barnuity\b",
+    "Asmanex": r"\basmanex\b|\bmometasone\b(?!\s*(?:\/|and)\s*formoterol)",
+    "Arnuity": r"\barnuity\b|\barnuity\s*ellipta\b|\bfluticasone\s*furoate\b",
     "budesonide": r"\bbudesonide\b(?!\s*(?:\/|and)\s*formoterol)",
-    "fluticasone": r"\bfluticasone\b(?!\s*(?:\/|and|propionate)\b)",
+    "fluticasone": r"\bfluticasone\b(?!\s*(?:\/|and|propionate|furoate)\b)",
     "beclomethasone": r"\bbeclomethasone\b|\bbeclovent\b",
     # Oral corticosteroids
-    "prednisone": r"\bprednisone\b|\bprednis(?:ol)?one\b",
-    "prednisolone": r"\bprednisolone\b|\borapred\b|\bprelone\b",
-    "dexamethasone": r"\bdexamethasone\b|\bdecadron\b",
+    "prednisone": r"\bprednisone\b|\bpred\b(?!\s*(?:forte|mild))",
+    "prednisolone": r"\bprednisolone\b|\borapred\b|\bprelone\b|\bpediapred\b",
+    "dexamethasone": r"\bdexamethasone\b|\bdecadron\b|\bdex\b(?=\s+(?:dose|taper|burst|steroid|for|to\s+treat))",
     "oral steroids": r"\boral\s+steroid[s]?\b|\bsteroid\s+(?:burst|course|taper|pack)\b",
     # Bronchodilators
-    "albuterol": r"\balbuterol\b|\bsalbutamol\b",
-    "ProAir": r"\bproair\b|\bpro[\s-]?air\b",
-    "Ventolin": r"\bventolin\b",
-    "Proventil": r"\bproventil\b",
+    "albuterol": r"\balbuterol\b|\bsalbutamol\b|\balbuterol\s*(?:hfa|sulfate)\b",
+    "ProAir": r"\bproair\b|\bpro[\s-]?air\b|\bproair\s*(?:hfa|respiclick|digihaler)\b",
+    "Ventolin": r"\bventolin\b|\bventolin\s*hfa\b",
+    "Proventil": r"\bproventil\b|\bproventil\s*hfa\b",
     "levalbuterol": r"\blevalbuterol\b|\bxopenex\b",
-    "Xopenex": r"\bxopenex\b",
-    "rescue inhaler": r"\brescue\s*inhaler[s]?\b|\bemergency\s*inhaler\b|\brelief\s*inhaler\b",
+    "rescue inhaler": r"\brescue\s*inhaler[s]?\b|\bemergency\s*inhaler\b|\brelief\s*inhaler\b|\bhfa\s*inhaler\b",
     # Biologics
     "Dupixent": r"\bdupixent\b|\bdupilumab\b",
     "Xolair": r"\bxolair\b|\bomalizumab\b",
@@ -200,11 +201,12 @@ MEDICATIONS = {
     "Singulair": r"\bsingulair\b|\bsingular\b|\bmontelukast\b",
     "Accolate": r"\baccolate\b|\bzafirlukast\b",
     # Combination inhalers
-    "Advair": r"\badvair\b",
-    "Symbicort": r"\bsymbicort\b",
-    "Dulera": r"\bdulera\b",
-    "Breo": r"\bbreo\b",
-    "AirDuo": r"\bairduo\b|\bair\s*duo\b",
+    "Advair": r"\badvair\b|\bwixela\b|\bfluticasone\s*(?:\/|and)\s*salmeterol\b",
+    "Symbicort": r"\bsymbicort\b|\bbudesonide\s*(?:\/|and)\s*formoterol\b|\bbreyna\b",
+    "Dulera": r"\bdulera\b|\bmometasone\s*(?:\/|and)\s*formoterol\b",
+    "Breo": r"\bbreo\b|\bbreo\s*ellipta\b|\bfluticasone\s*(?:\/|and)\s*vilanterol\b",
+    "AirDuo": r"\bairduo\b|\bair\s*duo\b|\bairduo\s*(?:respiclick|digihaler)\b",
+    "AirSupra": r"\bairsupra\b|\bair\s*supra\b|\balbuterol\s*(?:\/|and)\s*budesonide\b",
     # Devices
     "nebulizer": r"\bnebulizer[s]?\b|\bnebuliser[s]?\b|\bneb\s+(?:treatment|machine|mask)\b|\bneb\b",
     "spacer": r"\bspacer[s]?\b|\baero\s*chamber\b",
@@ -220,14 +222,14 @@ MEDICATION_CLASSES = {
     "dexamethasone": "Oral corticosteroids", "oral steroids": "Oral corticosteroids",
     "albuterol": "Bronchodilators", "ProAir": "Bronchodilators",
     "Ventolin": "Bronchodilators", "Proventil": "Bronchodilators",
-    "levalbuterol": "Bronchodilators", "Xopenex": "Bronchodilators",
+    "levalbuterol": "Bronchodilators",
     "rescue inhaler": "Bronchodilators",
     "Dupixent": "Biologics", "Xolair": "Biologics", "Nucala": "Biologics",
     "Fasenra": "Biologics", "Tezspire": "Biologics",
     "Singulair": "Leukotriene modifiers", "Accolate": "Leukotriene modifiers",
     "Advair": "Combination inhalers", "Symbicort": "Combination inhalers",
     "Dulera": "Combination inhalers", "Breo": "Combination inhalers",
-    "AirDuo": "Combination inhalers",
+    "AirDuo": "Combination inhalers", "AirSupra": "Combination inhalers",
     "nebulizer": "Devices", "spacer": "Devices",
     "peak flow meter": "Devices", "pulse oximeter": "Devices",
 }
@@ -269,33 +271,43 @@ _COMPILED_EFFECTS = {name: re.compile(pat, re.IGNORECASE) for name, pat in SIDE_
 
 TREATMENT_BELIEFS = {
     "Albuterol-only reliance":
-        r"\b(?:only|just)\s+(?:need|use|give|take)\w*\s+(?:the\s+)?(?:albuterol|rescue\s*inhaler|ventolin|proair)\b"
-        r"|\b(?:albuterol|rescue\s*inhaler)\b.{0,40}\b(?:(?:is\s+)?enough|all\s+(?:we|they|you)\s+need|don'?t\s+need\s+(?:a\s+)?controller)\b",
+        r"\b(?:only|just)\s+(?:need|use|give|take)\w*\s+(?:\w+\s+){0,2}(?:albuterol|rescue\s*inhaler|ventolin|proair)\b"
+        r"|\b(?:albuterol|rescue\s*inhaler)\b.{0,40}\b(?:(?:is\s+)?enough|all\s+(?:we|they|you|he|she)\s+need|don'?t\s+need\s+(?:a\s+)?(?:controller|daily|maintenance))\b"
+        r"|\bjust\s+use\s+\w+\s+(?:albuterol|rescue\s*inhaler|ventolin|proair)\b.{0,30}\b(?:when|during|if)\b",
     "Nebulizer superiority myth":
-        r"\bnebulizer\b.{0,50}\b(?:better|stronger|more\s+effective|works?\s+better)\b.{0,30}\b(?:than\s+(?:an?\s+)?inhaler)\b"
-        r"|\bnebulizer\b.{0,40}\b(?:superior|more\s+powerful|stronger)\b",
+        r"\bnebulizer\w*\b.{0,50}\b(?:work\w*\s+better|better\s+than|stronger\s+than|more\s+effective)\b"
+        r"|\bnebulizer\w*\b.{0,40}\b(?:superior|more\s+powerful|stronger)\b"
+        r"|\binhaler\w*\b.{0,40}\b(?:don'?t|doesn'?t|not)\b.{0,20}\b(?:work\s+as\s+well|as\s+(?:good|effective))\b",
     "Alternative medicine cures":
-        r"\b(?:essential\s+oil|homeopath\w*|chiropractic|acupunctur\w*|herbal|naturopath\w*)\b.{0,50}\b(?:cure[sd]?\s+asthma|treat\s+asthma|fix\w*\s+asthma|heal\w*\s+asthma)\b"
-        r"|\basthma\b.{0,50}\b(?:cure[sd]?\s+(?:by|with|through)\s+(?:essential\s+oil|homeopath|chiropractic|herbal|natural))\b",
+        r"\b(?:essential\s+oil\w*|homeopath\w*|chiropractic|acupunctur\w*|herbal|naturopath\w*)\b.{0,60}\b(?:cure[sd]?|treat\w*|fix\w*|heal\w*|help\w*)\b.{0,30}\basthma\b"
+        r"|\basthma\b.{0,60}\b(?:cure[sd]?|treat\w*|fix\w*|heal\w*)\b.{0,30}\b(?:essential\s+oil|homeopath|chiropractic|herbal|natural|holistic)\b"
+        r"|\b(?:essential\s+oil\w*|homeopath\w*|chiropractic)\b.{0,30}\b(?:cure[sd]?|heal\w*|fix\w*)\b.{0,30}\b(?:his|her|their|our|my)\b.{0,15}\basthma\b",
     "Steroid growth stunting fear":
-        r"\b(?:steroid|inhaler|flovent|pulmicort|budesonide|fluticasone|ics)\b.{0,60}\b(?:stunt\w*\s+growth|stop\s+grow|affect\s+(?:their\s+)?(?:growth|height)|make\s+(?:them\s+)?short|growth\s+(?:stunt|slow|suppress|delay|affect))\b"
-        r"|\bgrowth\b.{0,40}\b(?:stunt|slow|suppress|delay|affect)\w*\b.{0,40}\b(?:steroid|inhaler|flovent|pulmicort|budesonide)\b",
+        r"\b(?:steroid\w*|inhaler\w*|flovent|pulmicort|budesonide|fluticasone|ics)\b.{0,60}\b(?:stunt|slow|affect|stop|harm|delay|suppress)\w*\b.{0,20}\b(?:his|her|their|the)?\s*(?:growth|height|growing)\b"
+        r"|\bgrowth\b.{0,40}\b(?:stunt|slow|suppress|delay|affect)\w*\b.{0,40}\b(?:steroid|inhaler|flovent|pulmicort|budesonide)\b"
+        r"|\b(?:only|just|half)\s+(?:give|use|do)\w*\s+(?:the\s+)?half\s+(?:the\s+)?dose\b"
+        r"|\bhalf\s+(?:the\s+)?dose\b.{0,30}\b(?:steroid|inhaler|flovent|pulmicort)\b"
+        r"|\bdon'?t\s+(?:give|use)\s+(?:the\s+)?full\s+dose\b",
     "Outgrow asthma belief":
         r"\b(?:outgrow|grow\s+out\s+of|grow\s+out)\b.{0,30}\b(?:asthma|it)\b"
-        r"|\basthma\b.{0,40}\b(?:goes?\s+away|disappear|outgrow|grow\s+out)\b",
+        r"|\basthma\b.{0,40}\b(?:goes?\s+away|disappear|outgrow|grow\s+out)\b"
+        r"|\b(?:he|she|they|child|kid)\b.{0,20}\b(?:will|going\s+to|gonna)\s+(?:just\s+)?(?:outgrow|grow\s+out)\b",
     "Inhalers are addictive":
-        r"\b(?:inhaler|albuterol|steroid\s+inhaler)\b.{0,40}\b(?:addict\w*|depend\w*|habit\s*form\w*|hooked)\b"
-        r"|\b(?:addict\w*|depend\w*)\b.{0,40}\b(?:inhaler|albuterol)\b",
+        r"\b(?:inhaler\w*|albuterol|steroid\s+inhaler)\b.{0,40}\b(?:addict\w*|depend\w*|habit[\s-]*form\w*|hooked|reliant)\b"
+        r"|\b(?:addict\w*|depend\w*|hooked|reliant)\b.{0,40}\b(?:inhaler|albuterol)\b",
     "Natural remedies are better":
-        r"\b(?:natural|holistic|organic|alternative)\b.{0,50}\b(?:better|safer|prefer|instead\s+of)\b.{0,30}\b(?:medicine|medication|inhaler|steroid|drug)\b",
+        r"\b(?:natural|holistic|organic|alternative)\b.{0,50}\b(?:better|safer|prefer|instead\s+of)\b.{0,30}\b(?:medicine|medication|inhaler|steroid|drug)\b"
+        r"|\bdon'?t\s+(?:want|like|believe\s+in)\s+(?:giving\s+)?(?:medication|medicine|drugs?|chemicals?)\b.{0,30}\basthma\b",
     "Steroids are dangerous long-term":
-        r"\b(?:steroid|inhaler|ics|corticosteroid)\b.{0,60}\b(?:dangerous|harmful|bad|unsafe|toxic|poison|damag)\w*\b.{0,20}\b(?:long[\s-]*term|forever|years|lifetime)\b"
-        r"|\b(?:dangerous|harmful|bad|unsafe)\b.{0,40}\b(?:long[\s-]*term)\b.{0,40}\b(?:steroid|inhaler)\b",
+        r"\b(?:steroid\w*|inhaler\w*|ics|corticosteroid\w*)\b.{0,60}\b(?:dangerous|harmful|bad|unsafe|toxic|poison|damag)\w*\b.{0,30}\b(?:long[\s-]*term|forever|years|lifetime|prolonged)\b"
+        r"|\b(?:dangerous|harmful|bad|unsafe)\b.{0,40}\b(?:long[\s-]*term)\b.{0,40}\b(?:steroid|inhaler)\b"
+        r"|\bdon'?t\s+want\s+(?:him|her|them|my\s+\w+)\s+on\s+steroid\w*\b",
     "Asthma is psychological":
-        r"\basthma\b.{0,50}\b(?:(?:all\s+)?in\s+(?:their|your|his|her)\s+head|psycholog\w*|psychosomatic|mental|imagin\w*|anxiety\s+(?:based|caused|driven)|just\s+(?:stress|anxiety|panic))\b",
+        r"\basthma\b.{0,50}\b(?:(?:all\s+)?in\s+(?:their|your|his|her)\s+head|psycholog\w*|psychosomatic|mental|imagin\w*|anxiety[\s-]*(?:based|caused|driven)|just\s+(?:stress|anxiety|panic))\b",
     "Only need medicine during attacks":
-        r"\b(?:only|just)\s+(?:need|use|give|take)\w*\s+(?:medicine|medication|inhaler|treatment)\b.{0,40}\b(?:during|when|if)\s+(?:an?\s+)?(?:attack|flare|episode|symptom)\b"
-        r"|\bdon'?t\s+need\b.{0,40}\b(?:daily|every\s*day|controller|maintenance|preventive)\b",
+        r"\b(?:only|just)\s+(?:need|use|give|take)\w*\s+(?:\w+\s+){0,2}(?:medicine|medication|inhaler|treatment)\b.{0,40}\b(?:during|when|if)\s+(?:\w+\s+){0,2}(?:attack|flare|episode|symptom)\b"
+        r"|\bdon'?t\s+need\b.{0,40}\b(?:daily|every\s*day|controller|maintenance|preventive)\b"
+        r"|\b(?:only|just)\s+(?:when|during|if)\s+(?:he|she|they)\s+(?:ha(?:s|ve)|is\s+having)\s+(?:an?\s+)?(?:attack|flare|episode)\b",
 }
 
 BELIEF_SOURCES = {
