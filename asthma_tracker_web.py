@@ -302,6 +302,7 @@ table.heatmap .row-label{text-align:right;color:var(--muted);white-space:nowrap;
   <button class="preset-btn" onclick="setPreset(7)">Week</button>
   <button class="preset-btn" onclick="setPreset(30)">Month</button>
   <button class="preset-btn" onclick="setPreset(90)">90d</button>
+  <button class="preset-btn" onclick="setPreset(365)">1Y</button>
   <button class="preset-btn" onclick="setPreset(0)">All</button>
   <span id="customDateWrap" style="display:none">
     <span class="date-label">From</span><input type="date" id="dateFrom" onchange="saveState();loadAll()">
@@ -340,6 +341,12 @@ table.heatmap .row-label{text-align:right;color:var(--muted);white-space:nowrap;
 <!-- Chart 1b: Medication Sentiment + Fear -->
 <div class="card">
   <h2>Medication Sentiment &amp; Fear</h2>
+  <div style="font-size:11px;color:var(--muted);margin-bottom:6px">
+    <span style="display:inline-block;width:10px;height:10px;background:#4ade80;border-radius:2px;margin-right:3px;vertical-align:middle"></span>Positive Sentiment
+    <span style="display:inline-block;width:10px;height:10px;background:#f06060;border-radius:2px;margin:0 3px 0 12px;vertical-align:middle"></span>Negative Sentiment
+    <span style="display:inline-block;width:10px;height:10px;background:#8b90a0;border-radius:2px;margin:0 3px 0 12px;vertical-align:middle"></span>Neutral
+    <span style="display:inline-block;width:10px;height:10px;background:#f0a040;border-radius:2px;margin:0 3px 0 12px;vertical-align:middle"></span>Fear Score (0-1)
+  </div>
   <div class="chart-wrap"><canvas id="sentChart"></canvas></div>
 </div>
 
@@ -406,6 +413,66 @@ table.heatmap .row-label{text-align:right;color:var(--muted);white-space:nowrap;
 <div class="card">
   <h2>Caregiver Sentiment Daily</h2>
   <div class="chart-wrap"><canvas id="careChart"></canvas></div>
+</div>
+
+<!-- Chart 7: Corticosteroid Side Effects -->
+<div class="card">
+  <h2>Corticosteroid Side Effects <button class="methods-btn" onclick="toggleMethods('m-cortico')">Methods</button></h2>
+  <div class="methods-box" id="m-cortico">Tracks 8 corticosteroid-related side effects (roid rage, mood swings, sleep disturbances, appetite/weight, glucose issues, growth concerns, adrenal suppression, bone density) in posts/comments mentioning corticosteroids. Strict proximity matching: effect must appear within ~40 characters of steroid mention.</div>
+  <div id="corticoBars" class="bar-rows"></div>
+</div>
+
+<!-- Chart 7b: Corticosteroid Daily -->
+<div class="card">
+  <h2>Corticosteroid Effects Trend</h2>
+  <div class="chart-wrap"><canvas id="corticoChart"></canvas></div>
+</div>
+
+<!-- Chart 8: Functional Impact -->
+<div class="card">
+  <h2>Functional Impact <button class="methods-btn" onclick="toggleMethods('m-func')">Methods</button></h2>
+  <div class="methods-box" id="m-func">Tracks functional burden of pediatric asthma: missed school, missed parental work, activity limitations, and sports impact. Captures discourse around school absences, work absences, and activity restrictions due to asthma.</div>
+  <div id="funcBars" class="bar-rows"></div>
+</div>
+
+<!-- Chart 8b: Functional Impact Daily -->
+<div class="card">
+  <h2>Functional Impact Trend</h2>
+  <div class="chart-wrap"><canvas id="funcChart"></canvas></div>
+</div>
+
+<!-- Chart 9: Inhaler Confusion -->
+<div class="card">
+  <h2>Inhaler Confusion &amp; Technique <button class="methods-btn" onclick="toggleMethods('m-inhconf')">Methods</button></h2>
+  <div class="methods-box" id="m-inhconf">Detects 4 categories of inhaler confusion: type confusion (controller vs rescue), technique issues (improper use), timing confusion (when/how often to use), and device confusion (MDI vs nebulizer).</div>
+  <div id="inhConfBars" class="bar-rows"></div>
+</div>
+
+<!-- Chart 9b: Inhaler Confusion Daily -->
+<div class="card">
+  <h2>Inhaler Confusion Trend</h2>
+  <div class="chart-wrap"><canvas id="inhConfChart"></canvas></div>
+</div>
+
+<!-- Chart 10: ED Post-Visit Subcategories -->
+<div class="card">
+  <h2>Post-Visit Experience Breakdown <button class="methods-btn" onclick="toggleMethods('m-edsubcat')">Methods</button></h2>
+  <div class="methods-box" id="m-edsubcat">Breaks down post-visit ED discourse into 5 subcategories: new medication prescribed, diagnosis given, discharge instructions, satisfaction with care, and ongoing worry despite visit.</div>
+  <div id="edSubBars" class="bar-rows"></div>
+</div>
+
+<!-- Chart 11: Post-ED Outcome -->
+<div class="card">
+  <h2>Post-ED Outcome Sentiment <button class="methods-btn" onclick="toggleMethods('m-edoutcome')">Methods</button></h2>
+  <div class="methods-box" id="m-edoutcome">Captures parent-reported outcomes after ED visits: improvement (child better after), no improvement (still struggling), and temporary relief (symptoms returned). Only analyzed in posts with ED discourse.</div>
+  <div id="edOutBars" class="bar-rows"></div>
+</div>
+
+<!-- Chart 12: Caregiver Emotional State (ED-linked) -->
+<div class="card">
+  <h2>Caregiver Emotions — ED Context <button class="methods-btn" onclick="toggleMethods('m-careed')">Methods</button></h2>
+  <div class="methods-box" id="m-careed">Shows caregiver emotional state specifically in posts/comments that also contain ED/hospital discourse. Compare with the general caregiver chart above to see how ED visits affect emotional state.</div>
+  <div id="careEdBars" class="bar-rows"></div>
 </div>
 
 <!-- Post Explorer -->
@@ -538,7 +605,7 @@ const MED_CLASSES = {
   'albuterol':'Bronchodilators','ProAir':'Bronchodilators','Ventolin':'Bronchodilators','Proventil':'Bronchodilators','levalbuterol':'Bronchodilators','Xopenex':'Bronchodilators','rescue inhaler':'Bronchodilators',
   'Dupixent':'Biologics','Xolair':'Biologics','Nucala':'Biologics','Fasenra':'Biologics','Tezspire':'Biologics',
   'Singulair':'Leukotriene modifiers','Accolate':'Leukotriene modifiers',
-  'Advair':'Combination inhalers','Symbicort':'Combination inhalers','Dulera':'Combination inhalers','Breo':'Combination inhalers','AirDuo':'Combination inhalers',
+  'Advair':'Combination inhalers','Symbicort':'Combination inhalers','Dulera':'Combination inhalers','Breo':'Combination inhalers','AirDuo':'Combination inhalers','SMART therapy':'Combination inhalers',
   'nebulizer':'Devices','spacer':'Devices','peak flow meter':'Devices','pulse oximeter':'Devices'
 };
 const TRIG_CATS = {'Mold':'env','Air pollution':'env','Smoke':'env','Pets':'env','Pollen/seasonal':'env','Dust mites':'env','Weather changes':'env','Cold air':'env','RSV':'viral','Common cold':'viral','Flu':'viral','COVID':'viral','Respiratory infection':'viral','Croup':'viral','Vaccines':'neb','Diet/toxins':'neb','Chemicals':'neb','Mold toxicity':'neb','EMF':'neb'};
@@ -572,7 +639,41 @@ function renderStanceBars(container, data){
 
 function destroyChart(key){if(charts[key]){charts[key].destroy();delete charts[key]}}
 
-function renderLineChart(canvasId, dailyData, key){
+const seasonalPlugin = {
+  id:'seasonShading',
+  beforeDraw(chart, args, opts){
+    if(!opts || !opts.enabled) return;
+    const {ctx, chartArea:{left,right,top,bottom}, scales:{x}} = chart;
+    if(!x) return;
+    const labels = chart.data.labels;
+    if(!labels || !labels.length) return;
+    ctx.save();
+    // Aug-Oct (back-to-school), Mar-Apr (spring pollen)
+    const seasons = [
+      {start:8,end:10,color:'rgba(240,160,64,0.06)'},
+      {start:3,end:4,color:'rgba(74,222,128,0.06)'}
+    ];
+    for(const s of seasons){
+      let inSeason=false, sx=left;
+      for(let i=0;i<labels.length;i++){
+        const m=parseInt(labels[i].split('-')[1],10);
+        const px=x.getPixelForValue(i);
+        if(m>=s.start&&m<=s.end){
+          if(!inSeason){sx=px;inSeason=true}
+        } else if(inSeason){
+          ctx.fillStyle=s.color;
+          ctx.fillRect(sx,top,px-sx,bottom-top);
+          inSeason=false;
+        }
+      }
+      if(inSeason){ctx.fillStyle=s.color;ctx.fillRect(sx,top,right-sx,bottom-top)}
+    }
+    ctx.restore();
+  }
+};
+Chart.register(seasonalPlugin);
+
+function renderLineChart(canvasId, dailyData, key, showSeasons){
   destroyChart(key);
   const dates = Object.keys(dailyData).sort();
   if(!dates.length) return;
@@ -595,7 +696,7 @@ function renderLineChart(canvasId, dailyData, key){
     options: {
       responsive: true, maintainAspectRatio: false,
       scales: {x:{ticks:{maxTicksLimit:10,color:'#8b90a0'}},y:{beginAtZero:true,ticks:{color:'#8b90a0'}}},
-      plugins:{legend:{labels:{color:'#e1e4ed',boxWidth:12}}}
+      plugins:{legend:{labels:{color:'#e1e4ed',boxWidth:12}},seasonShading:{enabled:!!showSeasons}}
     }
   });
 }
@@ -604,7 +705,7 @@ function renderLineChart(canvasId, dailyData, key){
 async function loadAll(){
   const q = qp();
   try{
-    const [meds, medSent, medDaily, edCounts, edDaily, beliefs, beliefStance, trigs, trigDaily, care, careDaily, singEffects, singDaily, singDisc, stats] = await Promise.all([
+    const [meds, medSent, medDaily, edCounts, edDaily, beliefs, beliefStance, trigs, trigDaily, care, careDaily, singEffects, singDaily, singDisc, corticoEffects, corticoDaily, funcImpact, funcDaily, inhConf, inhConfDaily, edSubcats, careEd, edOutcome, stats] = await Promise.all([
       fetch('/api/medications?'+q).then(r=>r.json()),
       fetch('/api/medication-sentiment?'+q).then(r=>r.json()),
       fetch('/api/medication-daily?'+q).then(r=>r.json()),
@@ -619,6 +720,15 @@ async function loadAll(){
       fetch('/api/singulair?'+q).then(r=>r.json()),
       fetch('/api/singulair-daily?'+q).then(r=>r.json()),
       fetch('/api/singulair-discourse?'+q).then(r=>r.json()),
+      fetch('/api/corticosteroid-effects?'+q).then(r=>r.json()),
+      fetch('/api/corticosteroid-daily?'+q).then(r=>r.json()),
+      fetch('/api/functional-impact?'+q).then(r=>r.json()),
+      fetch('/api/functional-impact-daily?'+q).then(r=>r.json()),
+      fetch('/api/inhaler-confusion?'+q).then(r=>r.json()),
+      fetch('/api/inhaler-confusion-daily?'+q).then(r=>r.json()),
+      fetch('/api/ed-subcategories?'+q).then(r=>r.json()),
+      fetch('/api/caregiver-ed?'+q).then(r=>r.json()),
+      fetch('/api/post-ed-outcome?'+q).then(r=>r.json()),
       fetch('/api/status').then(r=>r.json()),
     ]);
 
@@ -661,8 +771,8 @@ async function loadAll(){
       });
     }
 
-    // Chart 1c: Daily trend
-    renderLineChart('trendChart', meds.medication_daily || medDaily || {}, 'trend');
+    // Chart 1c: Daily trend (with seasonal shading)
+    renderLineChart('trendChart', meds.medication_daily || medDaily || {}, 'trend', true);
 
     // Chart 6: Singulair effects
     const singItems = (singEffects||[]).map(([name,cnt]) => [name, cnt, 'leuko']);
@@ -687,8 +797,8 @@ async function loadAll(){
     const trigItems = (trigs||[]).map(([name,cat,cnt]) => [name, cnt, TRIG_CATS[name]||'default']);
     renderBars(document.getElementById('trigBars'), trigItems, 0, null);
 
-    // Chart 4b: Trigger daily
-    renderLineChart('trigChart', trigDaily || {}, 'trigTrend');
+    // Chart 4b: Trigger daily (with seasonal shading)
+    renderLineChart('trigChart', trigDaily || {}, 'trigTrend', true);
 
     // Chart 5: Caregiver
     const careItems = (care||[]).map(([name,cnt]) => [name, cnt, 'default']);
@@ -699,6 +809,53 @@ async function loadAll(){
 
     // Chart 5b: Caregiver daily
     renderLineChart('careChart', careDaily || {}, 'careTrend');
+
+    // Chart 7: Corticosteroid effects
+    const corticoLabels = {'roid_rage':'Roid Rage','mood_swings':'Mood Swings','sleep_disturbances':'Sleep Disturbances','appetite_weight':'Appetite/Weight','glucose_issues':'Glucose Issues','growth_concerns':'Growth Concerns','adrenal_suppression':'Adrenal Suppression','bone_density':'Bone Density'};
+    const corticoItems = (corticoEffects||[]).map(([name,cnt]) => [corticoLabels[name]||name, cnt, 'oral']);
+    renderBars(document.getElementById('corticoBars'), corticoItems, 0, null);
+
+    // Chart 7b: Corticosteroid daily
+    renderLineChart('corticoChart', corticoDaily || {}, 'corticoTrend');
+
+    // Chart 8: Functional impact
+    const funcLabels = {'missed_school':'Missed School','missed_work':'Missed Work (Parent)','activity_limitation':'Activity Limitation','sports_impact':'Sports Impact'};
+    const funcItems = (funcImpact||[]).map(([name,cnt]) => [funcLabels[name]||name, cnt, 'default']);
+    renderBars(document.getElementById('funcBars'), funcItems, 0, n => {
+      const m = {'Missed School':'discordant','Missed Work (Parent)':'oral','Activity Limitation':'uncertain','Sports Impact':'leuko'};
+      return m[n]||'default';
+    });
+
+    // Chart 8b: Functional impact daily
+    renderLineChart('funcChart', funcDaily || {}, 'funcTrend');
+
+    // Chart 9: Inhaler confusion
+    const inhLabels = {'type_confusion':'Type Confusion','technique_issues':'Technique Issues','timing_confusion':'Timing Confusion','device_confusion':'Device Confusion'};
+    const inhItems = (inhConf||[]).map(([name,cnt]) => [inhLabels[name]||name, cnt, 'broncho']);
+    renderBars(document.getElementById('inhConfBars'), inhItems, 0, null);
+
+    // Chart 9b: Inhaler confusion daily
+    renderLineChart('inhConfChart', inhConfDaily || {}, 'inhConfTrend');
+
+    // Chart 10: ED subcategories
+    const edSubLabels = {'prescribed_new_med':'New Medication Prescribed','diagnosis_given':'Diagnosis Given','discharge_instructions':'Discharge Instructions','satisfaction':'Care Satisfaction','still_worried':'Still Worried'};
+    const edSubItems = (edSubcats||[]).map(([name,cnt]) => [edSubLabels[name]||name, cnt, 'combo']);
+    renderBars(document.getElementById('edSubBars'), edSubItems, 0, null);
+
+    // Chart 11: Post-ED outcome
+    const edOutLabels = {'improvement':'Improvement','no_improvement':'No Improvement','temporary_relief':'Temporary Relief'};
+    const edOutItems = (edOutcome||[]).map(([name,cnt]) => [edOutLabels[name]||name, cnt, 'default']);
+    renderBars(document.getElementById('edOutBars'), edOutItems, 0, n => {
+      const m = {'Improvement':'concordant','No Improvement':'discordant','Temporary Relief':'uncertain'};
+      return m[n]||'default';
+    });
+
+    // Chart 12: Caregiver ED-linked
+    const careEdItems = (careEd||[]).map(([name,cnt]) => [name, cnt, 'default']);
+    renderBars(document.getElementById('careEdBars'), careEdItems, 0, n => {
+      const m = {'trust':'concordant','frustration':'discordant','dismissed':'uncertain','anxiety':'oral','empowerment':'ics'};
+      return m[n]||'default';
+    });
 
     // Populate explorer dropdown
     const sel = document.getElementById('explorerType');
@@ -1013,6 +1170,60 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/singulair-discourse":
             conn = tracker.get_db()
             data = tracker.query_singulair_discourse_counts(conn, date_from=df, date_to=dt, subreddit=sv)
+            conn.close()
+            self._json(data)
+
+        elif path == "/api/corticosteroid-effects":
+            conn = tracker.get_db()
+            data = tracker.query_corticosteroid_effect_counts(conn, date_from=df, date_to=dt, subreddit=sv)
+            conn.close()
+            self._json(data)
+
+        elif path == "/api/corticosteroid-daily":
+            conn = tracker.get_db()
+            data = tracker.query_corticosteroid_daily(conn, date_from=df, date_to=dt, subreddit=sv)
+            conn.close()
+            self._json(data)
+
+        elif path == "/api/functional-impact":
+            conn = tracker.get_db()
+            data = tracker.query_functional_impact_counts(conn, date_from=df, date_to=dt, subreddit=sv)
+            conn.close()
+            self._json(data)
+
+        elif path == "/api/functional-impact-daily":
+            conn = tracker.get_db()
+            data = tracker.query_functional_impact_daily(conn, date_from=df, date_to=dt, subreddit=sv)
+            conn.close()
+            self._json(data)
+
+        elif path == "/api/inhaler-confusion":
+            conn = tracker.get_db()
+            data = tracker.query_inhaler_confusion_counts(conn, date_from=df, date_to=dt, subreddit=sv)
+            conn.close()
+            self._json(data)
+
+        elif path == "/api/inhaler-confusion-daily":
+            conn = tracker.get_db()
+            data = tracker.query_inhaler_confusion_daily(conn, date_from=df, date_to=dt, subreddit=sv)
+            conn.close()
+            self._json(data)
+
+        elif path == "/api/ed-subcategories":
+            conn = tracker.get_db()
+            data = tracker.query_ed_subcategory_counts(conn, date_from=df, date_to=dt, subreddit=sv)
+            conn.close()
+            self._json(data)
+
+        elif path == "/api/caregiver-ed":
+            conn = tracker.get_db()
+            data = tracker.query_caregiver_ed_linked(conn, date_from=df, date_to=dt, subreddit=sv)
+            conn.close()
+            self._json(data)
+
+        elif path == "/api/post-ed-outcome":
+            conn = tracker.get_db()
+            data = tracker.query_post_ed_outcome_counts(conn, date_from=df, date_to=dt, subreddit=sv)
             conn.close()
             self._json(data)
 

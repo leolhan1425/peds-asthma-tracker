@@ -55,7 +55,7 @@ peds-asthma-tracker/
 
 Backups go to: `~/Library/CloudStorage/Dropbox-Personal/backups/peds-asthma-tracker/`
 
-## Database schema (17 tables)
+## Database schema (22 tables)
 
 - **posts** — id (TEXT PK), title, selftext, created_utc (REAL), score, num_comments, permalink, first_seen, sentiment (REAL), fear_score (REAL), comments_scraped (0/1), subreddit, engagement_score, sort_source ('new'/'hot'), crosspost_parent, pediatric_confidence ('definite'/'likely'/'none'), child_age_mentioned (TEXT)
 - **comments** — id (TEXT PK), post_id (FK), body, score, created_utc, author, sentiment, fear_score, first_seen
@@ -64,8 +64,13 @@ Backups go to: `~/Library/CloudStorage/Dropbox-Personal/backups/peds-asthma-trac
 - **treatment_beliefs** — source_type, source_id, belief, stance ('concordant'/'discordant'/'uncertain'/'unclear') (composite PK: source_type, source_id, belief)
 - **ed_discourse** — source_type, source_id, category ('decision_uncertainty'/'post_visit'/'return_visits'/'barriers') (composite PK)
 - **triggers** — source_type, source_id, trigger_name, trigger_category ('environmental'/'viral'/'non_evidence_based') (composite PK: source_type, source_id, trigger_name)
-- **caregiver_sentiment** — source_type, source_id, category ('trust'/'frustration'/'dismissed'/'anxiety'/'empowerment') (composite PK)
+- **caregiver_sentiment** — source_type, source_id, category ('trust'/'frustration'/'dismissed'/'anxiety'/'empowerment'), ed_related (INTEGER DEFAULT 0) (composite PK)
 - **singulair_effects** — source_type, source_id, effect (composite PK)
+- **corticosteroid_effects** — source_type, source_id, effect (composite PK). 8 effects with proximity gating.
+- **functional_impact** — source_type, source_id, category (composite PK). 4 categories: missed_school, missed_work, activity_limitation, sports_impact.
+- **inhaler_confusion** — source_type, source_id, category (composite PK). 4 categories: type_confusion, technique_issues, timing_confusion, device_confusion.
+- **ed_subcategories** — source_type, source_id, subcategory (composite PK). 5 sub-categories of post_visit ED discourse.
+- **post_ed_outcome** — source_type, source_id, outcome (composite PK). 3 outcomes: improvement, no_improvement, temporary_relief.
 - **scrape_runs** — id, scraped_at, post_count, subreddit, error_count
 - **scrape_errors** — id, timestamp, subreddit, error_type, message, source_id, source_type
 - **validation_votes** — id, post_id, validator, system_flagged, human_flagged, human_stance, reason, system_claims (JSON), voted_at. UNIQUE(post_id, validator).
@@ -74,10 +79,10 @@ Backups go to: `~/Library/CloudStorage/Dropbox-Personal/backups/peds-asthma-trac
 - **feedback** — id, voter_id, suggestion, created_at, status
 - **feedback_votes** — id, feedback_id, voter_id, voted_at. UNIQUE(feedback_id, voter_id).
 
-## 6 Dashboard modules
+## 12 Dashboard modules
 
 ### Chart 1: Medication Sentiment Tracker
-~35 medications in 8 classes: ICS (Flovent, QVAR, Pulmicort, Alvesco, Asmanex, Arnuity, budesonide, fluticasone, beclomethasone), Oral corticosteroids (prednisone, prednisolone, dexamethasone, oral steroids), Bronchodilators (albuterol, ProAir, Ventolin, Proventil, levalbuterol, Xopenex, rescue inhaler), Biologics (Dupixent, Xolair, Nucala, Fasenra, Tezspire), Leukotriene modifiers (Singulair, Accolate), Combination inhalers (Advair, Symbicort, Dulera, Breo, AirDuo), Devices (nebulizer, spacer, peak flow meter, pulse oximeter). Sentiment + fear score per medication, time-series with volume.
+~36 medications in 8 classes: ICS (Flovent, QVAR, Pulmicort, Alvesco, Asmanex, Arnuity, budesonide, fluticasone, beclomethasone), Oral corticosteroids (prednisone, prednisolone, dexamethasone, oral steroids), Bronchodilators (albuterol, ProAir, Ventolin, Proventil, levalbuterol, Xopenex, rescue inhaler), Biologics (Dupixent, Xolair, Nucala, Fasenra, Tezspire), Leukotriene modifiers (Singulair, Accolate), Combination inhalers (Advair, Symbicort, Dulera, Breo, AirDuo, SMART therapy), Devices (nebulizer, spacer, peak flow meter, pulse oximeter). Sentiment + fear score per medication, time-series with volume. Color legend: green=positive, red=negative, gray=neutral, orange=fear.
 
 ### Chart 2: ED/Hospital Decision-Making Discourse
 4 categories: decision uncertainty, post-visit experience, return visits, barriers to access. Time-series with volume + sentiment. Maps to 72-hour ED return research.
@@ -105,12 +110,33 @@ Each with NAEPP/GINA source citations. Proximity-bounded regex patterns.
 Seasonal pattern tracking (viral spikes fall/winter, environmental summer).
 
 ### Chart 5: Caregiver Emotional State and System Trust
-5 categories: trust in providers, frustration with system, feeling dismissed, anxiety/fear, empowerment.
+5 categories: trust in providers, frustration with system, feeling dismissed, anxiety/fear, empowerment. Toggle for ED-related subset.
 
 ### Chart 6: Singulair/Montelukast Deep Dive (dedicated section)
 9 behavioral effects: nightmares, aggression, mood changes, suicidal ideation, sleep disturbances, anxiety, depression, personality changes, hyperactivity.
 4 discourse categories: black box warning, starting decision, stopping decision, seeking alternatives.
 Volume + fear sentiment time-series.
+
+### Chart 7: Corticosteroid Side Effects
+8 effects with strict proximity matching (~40 chars): roid rage, mood swings, sleep disturbances, appetite/weight, glucose issues, growth concerns, adrenal suppression, bone density. Gated on corticosteroid mention.
+
+### Chart 8: Functional Impact
+4 categories: missed school, missed work (parent), activity limitation, sports impact.
+
+### Chart 9: Inhaler Confusion & Technique
+4 categories: type confusion, technique issues, timing confusion, device confusion.
+
+### Chart 10: Post-Visit Sub-Categories
+5 sub-categories (gated on post_visit ED discourse match): new med prescribed, diagnosis given, discharge instructions, care satisfaction, still worried.
+
+### Chart 11: Post-ED Outcome
+3 parent-reported outcomes (gated on ED discourse match): improvement, no improvement, temporary relief.
+
+### Chart 12: Caregiver ED-Linked
+Caregiver emotional state filtered to posts with ED discourse match. Shows ED-specific emotional patterns.
+
+### Seasonal Shading
+1Y preset + semi-transparent background shading on medication and trigger trend lines for Aug-Oct (back-to-school) and Mar-Apr (spring pollen) exacerbation seasons.
 
 ## Sentiment analysis
 - **Standard sentiment** (-1.0 to +1.0): keyword-based scorer with negation windows + confidence dampening (same as bc-tracker)
@@ -167,6 +193,25 @@ All data endpoints accept `?from=YYYY-MM-DD&to=YYYY-MM-DD&sub=Asthma` for filter
 - `GET /api/singulair` — behavioral effect counts
 - `GET /api/singulair-daily` — daily time-series
 - `GET /api/singulair-discourse` — discourse categories
+
+### Chart 7: Corticosteroid Effects
+- `GET /api/corticosteroid-effects` — effect counts
+- `GET /api/corticosteroid-daily` — daily time-series
+
+### Chart 8: Functional Impact
+- `GET /api/functional-impact` — category counts
+- `GET /api/functional-impact-daily` — daily time-series
+
+### Chart 9: Inhaler Confusion
+- `GET /api/inhaler-confusion` — category counts
+- `GET /api/inhaler-confusion-daily` — daily time-series
+
+### Chart 10-11: ED Enhancements
+- `GET /api/ed-subcategories` — post-visit sub-category counts
+- `GET /api/post-ed-outcome` — parent-reported outcome counts
+
+### Chart 12: Caregiver ED-Linked
+- `GET /api/caregiver-ed` — caregiver sentiment filtered to ED-related
 
 ### Post Explorer
 - `GET /api/posts?medication=Albuterol&limit=20` — top posts
@@ -225,3 +270,4 @@ Tell Claude: "Continue building peds-asthma-tracker. Read CLAUDE.md and the plan
 - **2026-02-26** — Phase 1 complete: `asthma_tracker.py` (2332 lines). All regex patterns (35 medications, 20 side effects, 10 treatment beliefs, 4 ED categories, 19 triggers, 5 caregiver categories, 9 Singulair effects, 4 Singulair discourse). Two-stage content gate (asthma gate + pediatric gate). Sentiment + fear scoring. 17-table SQLite DB. All query functions with date/subreddit filtering. 3-facet validation system (beliefs, side effects, sentiment). Reddit scraping with crosspost dedup. Backup + CLI.
 - **2026-02-26** — Phase 2 complete: `asthma_tracker_web.py` (1208 lines). Scheduler, ~30 API endpoints, embedded HTML/CSS/JS dashboard with 6 chart modules, post explorer, validate tab, feedback tab. Port 8053.
 - **2026-02-26** — Phase 3 complete: `generate_site.py` (894 lines) bakes raw data into self-contained `docs/index.html` with client-side filtering. `deploy.sh`, `vps-setup.sh`, `peds-asthma-tracker.service` for VPS deployment.
+- **2026-03-04** — Feedback enhancements (10 items): expanded pediatric classification (possessive+device, parenting verbs, ER-with-child, school nurse, multi-signal promotion), added SMART therapy medication, medication sentiment color legend, 1Y preset + seasonal shading (Aug-Oct, Mar-Apr), 5 new DB tables (corticosteroid_effects, functional_impact, inhaler_confusion, ed_subcategories, post_ed_outcome), ed_related column on caregiver_sentiment, 9 new API endpoints, 6 new chart modules across all 3 files. DB: 17→22 tables, dashboard: 6→12 modules.

@@ -109,7 +109,8 @@ ASTHMA_GATE_PATTERN = re.compile(
     r'|\bxopenex\b|\blevalbuterol\b|\bnucala\b|\bfasenra\b|\btezspire\b'
     r'|\bpeak\s*flow\b|\bpulse\s*ox\w*\b|\brescue\s*inhaler\b'
     r'|\bcontroller\s*(?:med|medication|inhaler)\b|\bsteroid\s*inhaler\b'
-    r'|\bspacer\b|\brespiratory\s*(?:distress|infection|issue|problem)\b',
+    r'|\bspacer\b|\brespiratory\s*(?:distress|infection|issue|problem)\b'
+    r'|\bsmart\s+therapy\b|\bmart\s+therapy\b',
     re.IGNORECASE
 )
 
@@ -121,7 +122,11 @@ _PEDIATRIC_DEFINITE_PATTERN = re.compile(
     r'|\b(?:[1-9]|1[0-7])\s*(?:year|yr)\s*(?:\s*old)\b'
     r'|\b(?:he|she)\s+is\s+(?:[1-9]|1[0-7])\b'
     r'|\bmy\s+(?:3|4|5|6|7|8|9|10|11|12|13|14|15|16|17)\s*(?:yo|y/?o|year\s*old)\b'
-    r'|\bnewborn\b|\binfant\b|\bpreemie\b|\bnicu\b',
+    r'|\bnewborn\b|\binfant\b|\bpreemie\b|\bnicu\b'
+    r'|\b(?:his|her)\s+(?:inhaler|nebulizer|spacer|pulmicort|flovent|albuterol)\b'
+    r'|\bI\s+(?:gave|give|administered)\s+(?:him|her)\s+(?:the\s+)?(?:albuterol|pulmicort|flovent|budesonide|prednis\w*|inhaler|nebulizer|neb)\b'
+    r'|\b(?:brought|took|rushed)\s+(?:him|her)\s+to\s+(?:the\s+)?(?:er|ed|emergency|hospital|pediatrician|urgent\s+care)\b'
+    r'|\bschool\s+nurse\b',
     re.IGNORECASE
 )
 
@@ -145,7 +150,11 @@ def classify_pediatric_confidence(text: str, subreddit: str = "") -> str:
         return "definite"
     if _PEDIATRIC_DEFINITE_PATTERN.search(text):
         return "definite"
-    if _PEDIATRIC_LIKELY_PATTERN.search(text):
+    likely_matches = _PEDIATRIC_LIKELY_PATTERN.findall(text)
+    if likely_matches:
+        # Promote to definite if 2+ distinct likely signals found
+        if len(set(m.lower().strip() for m in likely_matches)) >= 2:
+            return "definite"
         return "likely"
     return "none"
 
@@ -207,6 +216,7 @@ MEDICATIONS = {
     "Breo": r"\bbreo\b|\bbreo\s*ellipta\b|\bfluticasone\s*(?:\/|and)\s*vilanterol\b",
     "AirDuo": r"\bairduo\b|\bair\s*duo\b|\bairduo\s*(?:respiclick|digihaler)\b",
     "AirSupra": r"\bairsupra\b|\bair\s*supra\b|\balbuterol\s*(?:\/|and)\s*budesonide\b",
+    "SMART therapy": r"\bsmart\s+(?:therapy|approach|protocol|regimen|inhaler)\b|\bsingle\s+maintenance\s+and\s+reliever\b|\bmaintenance\s+and\s+reliever\s+therapy\b|\bmart\s+(?:therapy|approach|protocol)\b",
     # Devices
     "nebulizer": r"\bnebulizer[s]?\b|\bnebuliser[s]?\b|\bneb\s+(?:treatment|machine|mask)\b|\bneb\b",
     "spacer": r"\bspacer[s]?\b|\baero\s*chamber\b",
@@ -230,6 +240,7 @@ MEDICATION_CLASSES = {
     "Advair": "Combination inhalers", "Symbicort": "Combination inhalers",
     "Dulera": "Combination inhalers", "Breo": "Combination inhalers",
     "AirDuo": "Combination inhalers", "AirSupra": "Combination inhalers",
+    "SMART therapy": "Combination inhalers",
     "nebulizer": "Devices", "spacer": "Devices",
     "peak flow meter": "Devices", "pulse oximeter": "Devices",
 }
@@ -520,6 +531,154 @@ _COMPILED_SINGULAIR_EFFECTS = {name: re.compile(pat, re.IGNORECASE) for name, pa
 _COMPILED_SINGULAIR_DISCOURSE = {name: re.compile(pat, re.IGNORECASE) for name, pat in SINGULAIR_DISCOURSE.items()}
 
 # ---------------------------------------------------------------------------
+# Corticosteroid side effects (strict proximity: effect near steroid mention)
+# ---------------------------------------------------------------------------
+
+_CORTICOSTEROID_PATTERN = re.compile(
+    r'\b(?:steroid|corticosteroid|prednisone|prednisolone|dexamethasone|decadron|budesonide|fluticasone|'
+    r'pulmicort|flovent|qvar|alvesco|asmanex|arnuity|beclomethasone|oral\s+steroid)\b',
+    re.IGNORECASE
+)
+
+CORTICOSTEROID_EFFECTS = {
+    "roid_rage":
+        r"\broid\s*rage\b"
+        r"|\b(?:aggress\w*|rage|violent|anger|angry)\b.{0,40}\b(?:steroid|prednisone|prednisolone|dex\w*|corticosteroid|pred)\b"
+        r"|\b(?:steroid|prednisone|prednisolone|dex\w*|pred)\b.{0,40}\b(?:aggress\w*|rage|violent|anger|angry)\b",
+    "mood_swings":
+        r"\b(?:mood\s+(?:swing|change|shift)\w*|irritab\w*|emotional(?:ly)?)\b.{0,40}\b(?:steroid|pred\w*|dex\w*|corticosteroid|budesonide|fluticasone)\b"
+        r"|\b(?:steroid|pred\w*|dex\w*|corticosteroid)\b.{0,40}\b(?:mood\s+(?:swing|change|shift)|irritab\w*)\b",
+    "sleep_disturbances":
+        r"\b(?:sleep\s+(?:issue|problem|disturb)\w*|insomnia|can'?t\s+sleep|up\s+all\s+night|wired)\b.{0,40}\b(?:steroid|pred\w*|dex\w*|budesonide|fluticasone|corticosteroid)\b"
+        r"|\b(?:steroid|pred\w*|dex\w*|corticosteroid)\b.{0,40}\b(?:sleep\s+(?:issue|problem)|insomnia|can'?t\s+sleep|wired)\b",
+    "appetite_weight":
+        r"\b(?:appetite\s+increas\w*|weight\s+gain|gained\s+weight|always\s+hungry|eating\s+everything|ravenous)\b.{0,40}\b(?:steroid|pred\w*|dex\w*|corticosteroid)\b"
+        r"|\b(?:steroid|pred\w*|dex\w*|corticosteroid)\b.{0,40}\b(?:appetite|weight\s+gain|hungry|eating\s+everything)\b",
+    "glucose_issues":
+        r"\b(?:blood\s+sugar|glucose|hyperglycemi\w*|sugar\s+levels?|diabetes)\b.{0,40}\b(?:steroid|pred\w*|dex\w*|corticosteroid)\b"
+        r"|\b(?:steroid|pred\w*|dex\w*|corticosteroid)\b.{0,40}\b(?:blood\s+sugar|glucose|hyperglycemi\w*|sugar\s+level)\b",
+    "growth_concerns":
+        r"\b(?:growth\s+(?:stunt|slow|delay|suppress|concern|affect)\w*|short\s+stature|height\s+(?:concern|issue|affect)\w*|not\s+growing)\b.{0,40}\b(?:steroid|ics|inhaler|flovent|pulmicort|budesonide|fluticasone|corticosteroid)\b"
+        r"|\b(?:steroid|ics|flovent|pulmicort|budesonide|fluticasone)\b.{0,40}\b(?:growth\s+(?:stunt|slow|delay|suppress|concern)|short\s+stature|height\s+concern|not\s+growing)\b",
+    "adrenal_suppression":
+        r"\b(?:adrenal\s+(?:suppress\w*|insufficien\w*|crisis|fatigue)|cortisol\s+(?:low|suppress|level))\b.{0,40}\b(?:steroid|pred\w*|flovent|pulmicort|budesonide|corticosteroid)\b"
+        r"|\b(?:steroid|pred\w*|corticosteroid)\b.{0,40}\b(?:adrenal\s+(?:suppress|insufficien|crisis)|cortisol)\b",
+    "bone_density":
+        r"\b(?:bone\s+(?:densit|loss|thin)\w*|osteoporo\w*)\b.{0,40}\b(?:steroid|pred\w*|ics|corticosteroid|long[\s-]*term)\b"
+        r"|\b(?:steroid|pred\w*|corticosteroid)\b.{0,40}\b(?:bone\s+(?:densit|loss|thin)|osteoporo)\b",
+}
+
+_COMPILED_CORTICOSTEROID_EFFECTS = {name: re.compile(pat, re.IGNORECASE) for name, pat in CORTICOSTEROID_EFFECTS.items()}
+
+# ---------------------------------------------------------------------------
+# Functional impact (missed school/work/activities)
+# ---------------------------------------------------------------------------
+
+FUNCTIONAL_IMPACT = {
+    "missed_school":
+        r"\bmissed\s+(?:school|class(?:es)?)\b|\bcan'?t\s+go\s+to\s+school\b|\babsent\s+from\s+school\b"
+        r"|\bhome\s+from\s+school\b|\bschool\s+absence\b|\bstay(?:ed|ing)?\s+home\s+from\s+school\b"
+        r"|\bout\s+of\s+school\b|\bmissing\s+school\b|\bdays?\s+(?:off|out)\s+(?:of\s+)?school\b",
+    "missed_work":
+        r"\bmissed\s+work\b|\bhad\s+to\s+call\s+(?:off|in|out)\b|\bcan'?t\s+(?:go\s+to\s+)?work\b"
+        r"|\bstay(?:ed|ing)?\s+home\s+from\s+work\b|\bfmla\b|\btook\s+(?:off|time\s+off)\s+(?:from\s+)?work\b"
+        r"|\bcall(?:ed|ing)?\s+(?:out|off)\s+(?:of\s+)?work\b|\bmissing\s+work\b",
+    "activity_limitation":
+        r"\bcan'?t\s+(?:play|run|exercise|participate)\b|\bsitting\s+out\b|\blimited\s+activit\w*\b"
+        r"|\bno\s+(?:sports|running|exercise)\b|\bmissed\s+(?:practice|game|recital|recess)\b"
+        r"|\bcan'?t\s+exercise\b|\bstopped?\s+playing\b|\bcan'?t\s+keep\s+up\b"
+        r"|\bsit\s+out\b|\brestrict(?:ed|ing)?\s+activit\w*\b",
+    "sports_impact":
+        r"\bquit\s+(?:the\s+)?(?:team|sport)\b|\bcan'?t\s+play\s+(?:soccer|baseball|basketball|football|hockey|lacrosse)\b"
+        r"|\bsideline[sd]?\b|\bbenched\b|\bcan'?t\s+(?:do\s+)?(?:pe|gym\s+class|recess)\b"
+        r"|\bpulled\s+(?:from|off)\s+(?:the\s+)?(?:team|field|game)\b",
+}
+
+_COMPILED_FUNCTIONAL_IMPACT = {name: re.compile(pat, re.IGNORECASE) for name, pat in FUNCTIONAL_IMPACT.items()}
+
+# ---------------------------------------------------------------------------
+# Inhaler confusion / technique issues
+# ---------------------------------------------------------------------------
+
+INHALER_CONFUSION = {
+    "type_confusion":
+        r"\bwhich\s+inhaler\b|\bwrong\s+inhaler\b|\bconfused\s+about\s+(?:the\s+)?inhaler\b"
+        r"|\bdon'?t\s+know\s+which\s+(?:inhaler|one)\b|\bcontroller\s+vs\.?\s+rescue\b"
+        r"|\bdifference\s+between\b.{0,20}\b(?:inhaler|controller|rescue|preventer|reliever)\b"
+        r"|\bwhich\s+(?:one\s+)?(?:is\s+)?(?:the\s+)?(?:rescue|controller|daily|maintenance)\b.{0,15}\b(?:inhaler|one)\b",
+    "technique_issues":
+        r"\busing\s+(?:it|the\s+inhaler)\s+wrong\b|\bnot\s+using\s+(?:it\s+)?correctly\b"
+        r"|\binhaler\s+technique\b|\bspacer\s+technique\b|\bhow\s+to\s+use\s+(?:the\s+)?(?:inhaler|spacer|neb)\b"
+        r"|\bnot\s+working\s+right\b|\bbad\s+technique\b|\bproper\s+technique\b"
+        r"|\bcan'?t\s+(?:get\s+)?(?:him|her|them)\s+to\s+use\s+(?:the\s+)?(?:inhaler|spacer)\b",
+    "timing_confusion":
+        r"\bwhen\s+to\s+use\b.{0,20}\b(?:inhaler|rescue|controller|albuterol)\b"
+        r"|\bhow\s+often\b.{0,15}\b(?:inhaler|albuterol|rescue|nebulizer)\b"
+        r"|\bbefore\s+or\s+after\b.{0,15}\b(?:inhaler|exercise|sports)\b"
+        r"|\bas\s+needed\s+vs\.?\s+daily\b|\bprn\b.{0,20}\b(?:vs\.?|versus|or)\b.{0,10}\b(?:daily|scheduled)\b"
+        r"|\bscheduled\s+vs\.?\s+(?:rescue|as\s+needed)\b",
+    "device_confusion":
+        r"\bmdi\s+vs\.?\s+(?:nebulizer|neb)\b|\bdry\s+powder\b.{0,15}\b(?:vs\.?|or|confused)\b"
+        r"|\bwhich\s+device\b|\bhow\s+to\s+use\s+(?:the\s+)?spacer\b"
+        r"|\bdon'?t\s+know\s+how\s+to\s+use\b.{0,15}\b(?:inhaler|spacer|neb|nebulizer)\b"
+        r"|\b(?:metered\s+dose|dry\s+powder|diskus|respiclick)\b.{0,20}\b(?:confused|don'?t\s+understand|which)\b",
+}
+
+_COMPILED_INHALER_CONFUSION = {name: re.compile(pat, re.IGNORECASE) for name, pat in INHALER_CONFUSION.items()}
+
+# ---------------------------------------------------------------------------
+# Post-visit subcategories (for ED discourse post_visit)
+# ---------------------------------------------------------------------------
+
+POST_VISIT_SUBCATEGORIES = {
+    "prescribed_new_med":
+        r"\b(?:they|er|ed|doctor|hospital)\s+(?:prescribed|gave\s+(?:us|him|her))\s+(?:\w+\s+){0,3}(?:steroid|prednisone|prednisolone|albuterol|inhaler|nebulizer|medication|antibiotic)\b"
+        r"|\bstarted?\s+(?:on|him|her)\s+(?:on\s+)?(?:a\s+)?(?:new\s+)?(?:medication|inhaler|steroid|controller)\b",
+    "diagnosis_given":
+        r"\b(?:diagnosed\s+(?:with|as)|told\s+(?:us|me)\s+(?:it\s+was|(?:he|she)\s+has))\b.{0,30}\b(?:asthma|reactive\s+airway|bronchitis|croup|pneumonia|rsv|rav)\b"
+        r"|\bfirst\s+(?:asthma\s+)?diagnosis\b|\bfinally\s+diagnosed\b",
+    "discharge_instructions":
+        r"\bsent?\s+(?:us|him|her)\s+home\s+with\b|\basthma\s+action\s+plan\b"
+        r"|\btold\s+(?:us|me)\s+to\s+follow\s+up\b|\bdischarge\s+instructions?\b"
+        r"|\bfollow[\s-]*up\s+(?:with|in|appointment)\b",
+    "satisfaction":
+        r"\b(?:good|bad|great|terrible|amazing|awful|wonderful|horrible|helpful|unhelpful)\s+(?:experience|staff|doctor|nurse|visit)\b"
+        r"|\b(?:the\s+)?(?:doctor|nurse|staff)\s+(?:was|were)\s+(?:great|terrible|helpful|rude|amazing|awful|wonderful|kind)\b",
+    "still_worried":
+        r"\bstill\s+(?:concerned|worried|scared|anxious)\b.{0,20}\b(?:despite|after|even\s+after)\b"
+        r"|\bsymptoms?\s+(?:persist|continu|came\s+back|still|haven'?t\s+improved)\b.{0,20}\b(?:after|since)\s+(?:the\s+)?(?:er|ed|visit|hospital)\b"
+        r"|\bstill\s+(?:wheezing|coughing|struggling)\s+(?:after|since)\b",
+}
+
+_COMPILED_POST_VISIT_SUBCATEGORIES = {name: re.compile(pat, re.IGNORECASE) for name, pat in POST_VISIT_SUBCATEGORIES.items()}
+
+# ---------------------------------------------------------------------------
+# Post-ED outcome sentiment
+# ---------------------------------------------------------------------------
+
+POST_ED_OUTCOME = {
+    "improvement":
+        r"\b(?:better|improved|improving)\s+(?:after|since|following)\b.{0,30}\b(?:er|ed|emergency|hospital|visit|discharge)\b"
+        r"|\b(?:er|ed|emergency|hospital)\b.{0,30}\b(?:helped|worked|resolved|better|improved)\b"
+        r"|\bbreathing\s+(?:much\s+)?better\b.{0,20}\b(?:after|since|now)\b"
+        r"|\bback\s+to\s+normal\b|\bcleared?\s+up\b|\bfeeling\s+better\s+(?:since|after|now)\b",
+    "no_improvement":
+        r"\bstill\s+struggling\b.{0,20}\b(?:after|since)\s+(?:the\s+)?(?:er|ed|visit|hospital)\b"
+        r"|\bdidn'?t\s+help\b.{0,20}\b(?:er|ed|visit|hospital|trip)\b"
+        r"|\bgot\s+worse\b.{0,20}\b(?:after|since)\s+(?:the\s+)?(?:er|ed|visit)\b"
+        r"|\bback\s+(?:to|in|at)\s+(?:the\s+)?(?:er|ed)\s+(?:again|already|next\s+day)\b"
+        r"|\bno\s+improvement\b|\bnot\s+(?:any\s+)?better\b.{0,20}\b(?:after|since)\b",
+    "temporary_relief":
+        r"\bbetter\s+for\s+(?:a\s+)?(?:while|few\s+(?:hours?|days?))\b"
+        r"|\b(?:symptoms?|wheezing|cough)\s+came\s+back\b"
+        r"|\bwore\s+off\b.{0,20}\b(?:after|hours?|days?)\b"
+        r"|\btemporary\b.{0,15}\b(?:relief|better|improvement)\b"
+        r"|\bonly\s+lasted\b|\b(?:symptoms?\s+)?return(?:ed|ing)\b.{0,20}\b(?:after|hours?|days?|next)\b",
+}
+
+_COMPILED_POST_ED_OUTCOME = {name: re.compile(pat, re.IGNORECASE) for name, pat in POST_ED_OUTCOME.items()}
+
+# ---------------------------------------------------------------------------
 # Sentiment analysis (standard + fear dimension)
 # ---------------------------------------------------------------------------
 
@@ -693,6 +852,31 @@ def find_singulair_discourse(text: str) -> list:
     return [name for name, pat in _COMPILED_SINGULAIR_DISCOURSE.items() if pat.search(text)]
 
 
+def find_corticosteroid_effects(text: str) -> list:
+    """Return list of corticosteroid side effects found in text."""
+    return [name for name, pat in _COMPILED_CORTICOSTEROID_EFFECTS.items() if pat.search(text)]
+
+
+def find_functional_impact(text: str) -> list:
+    """Return list of functional impact categories found in text."""
+    return [name for name, pat in _COMPILED_FUNCTIONAL_IMPACT.items() if pat.search(text)]
+
+
+def find_inhaler_confusion(text: str) -> list:
+    """Return list of inhaler confusion categories found in text."""
+    return [name for name, pat in _COMPILED_INHALER_CONFUSION.items() if pat.search(text)]
+
+
+def find_post_visit_subcategories(text: str) -> list:
+    """Return list of post-visit subcategories found in text."""
+    return [name for name, pat in _COMPILED_POST_VISIT_SUBCATEGORIES.items() if pat.search(text)]
+
+
+def find_post_ed_outcome(text: str) -> list:
+    """Return list of post-ED outcomes found in text."""
+    return [name for name, pat in _COMPILED_POST_ED_OUTCOME.items() if pat.search(text)]
+
+
 def compute_engagement(score: int, num_comments: int) -> float:
     """Engagement score: weights discussion (comments) higher than upvotes."""
     return math.log2(max(score, 1)) + math.log2(max(num_comments, 1)) * 1.5
@@ -784,6 +968,36 @@ def get_db(path: Optional[Path] = None) -> sqlite3.Connection:
             effect TEXT NOT NULL,
             PRIMARY KEY (source_type, source_id, effect)
         );
+        CREATE TABLE IF NOT EXISTS corticosteroid_effects (
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            effect TEXT NOT NULL,
+            PRIMARY KEY (source_type, source_id, effect)
+        );
+        CREATE TABLE IF NOT EXISTS functional_impact (
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            category TEXT NOT NULL,
+            PRIMARY KEY (source_type, source_id, category)
+        );
+        CREATE TABLE IF NOT EXISTS inhaler_confusion (
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            category TEXT NOT NULL,
+            PRIMARY KEY (source_type, source_id, category)
+        );
+        CREATE TABLE IF NOT EXISTS ed_subcategories (
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            subcategory TEXT NOT NULL,
+            PRIMARY KEY (source_type, source_id, subcategory)
+        );
+        CREATE TABLE IF NOT EXISTS post_ed_outcome (
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            outcome TEXT NOT NULL,
+            PRIMARY KEY (source_type, source_id, outcome)
+        );
         CREATE TABLE IF NOT EXISTS scrape_runs (
             id INTEGER PRIMARY KEY,
             scraped_at TEXT NOT NULL,
@@ -857,6 +1071,11 @@ def get_db(path: Optional[Path] = None) -> sqlite3.Connection:
         CREATE INDEX IF NOT EXISTS idx_triggers_name ON triggers(trigger_name);
         CREATE INDEX IF NOT EXISTS idx_caregiver_cat ON caregiver_sentiment(category);
         CREATE INDEX IF NOT EXISTS idx_singulair_effect ON singulair_effects(effect);
+        CREATE INDEX IF NOT EXISTS idx_cortico_effect ON corticosteroid_effects(effect);
+        CREATE INDEX IF NOT EXISTS idx_functional_cat ON functional_impact(category);
+        CREATE INDEX IF NOT EXISTS idx_inhaler_conf_cat ON inhaler_confusion(category);
+        CREATE INDEX IF NOT EXISTS idx_ed_subcat ON ed_subcategories(subcategory);
+        CREATE INDEX IF NOT EXISTS idx_post_ed_outcome ON post_ed_outcome(outcome);
         CREATE INDEX IF NOT EXISTS idx_errors_ts ON scrape_errors(timestamp);
         CREATE INDEX IF NOT EXISTS idx_vv_validator ON validation_votes(validator);
         CREATE INDEX IF NOT EXISTS idx_vv_post ON validation_votes(post_id);
@@ -867,6 +1086,11 @@ def get_db(path: Optional[Path] = None) -> sqlite3.Connection:
         CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status);
         CREATE INDEX IF NOT EXISTS idx_feedback_votes_fid ON feedback_votes(feedback_id);
     """)
+    # Add ed_related column to caregiver_sentiment if not present
+    try:
+        conn.execute("ALTER TABLE caregiver_sentiment ADD COLUMN ed_related INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -1039,7 +1263,9 @@ def save_posts_to_db(conn: sqlite3.Connection, posts: list,
             )
 
         # ED discourse
-        for cat in find_ed_discourse(text):
+        ed_categories = find_ed_discourse(text)
+        has_ed = bool(ed_categories)
+        for cat in ed_categories:
             conn.execute(
                 "INSERT OR IGNORE INTO ed_discourse (source_type, source_id, category) VALUES ('post', ?, ?)",
                 (post["id"], cat),
@@ -1053,11 +1279,14 @@ def save_posts_to_db(conn: sqlite3.Connection, posts: list,
                 (post["id"], trig, trig_cat),
             )
 
-        # Caregiver sentiment
+        # Caregiver sentiment (with ED linkage)
         for cat in find_caregiver_sentiment(text):
             conn.execute(
-                "INSERT OR IGNORE INTO caregiver_sentiment (source_type, source_id, category) VALUES ('post', ?, ?)",
-                (post["id"], cat),
+                """INSERT INTO caregiver_sentiment (source_type, source_id, category, ed_related)
+                   VALUES ('post', ?, ?, ?)
+                   ON CONFLICT(source_type, source_id, category)
+                   DO UPDATE SET ed_related = excluded.ed_related""",
+                (post["id"], cat, 1 if has_ed else 0),
             )
 
         # Singulair effects (only if post mentions Singulair/montelukast)
@@ -1066,6 +1295,44 @@ def save_posts_to_db(conn: sqlite3.Connection, posts: list,
                 conn.execute(
                     "INSERT OR IGNORE INTO singulair_effects (source_type, source_id, effect) VALUES ('post', ?, ?)",
                     (post["id"], eff),
+                )
+
+        # Corticosteroid effects (only if post mentions a corticosteroid)
+        if _CORTICOSTEROID_PATTERN.search(text):
+            for eff in find_corticosteroid_effects(text):
+                conn.execute(
+                    "INSERT OR IGNORE INTO corticosteroid_effects (source_type, source_id, effect) VALUES ('post', ?, ?)",
+                    (post["id"], eff),
+                )
+
+        # Functional impact
+        for cat in find_functional_impact(text):
+            conn.execute(
+                "INSERT OR IGNORE INTO functional_impact (source_type, source_id, category) VALUES ('post', ?, ?)",
+                (post["id"], cat),
+            )
+
+        # Inhaler confusion
+        for cat in find_inhaler_confusion(text):
+            conn.execute(
+                "INSERT OR IGNORE INTO inhaler_confusion (source_type, source_id, category) VALUES ('post', ?, ?)",
+                (post["id"], cat),
+            )
+
+        # Post-visit subcategories (only if post_visit ED discourse matched)
+        if "post_visit" in ed_categories:
+            for subcat in find_post_visit_subcategories(text):
+                conn.execute(
+                    "INSERT OR IGNORE INTO ed_subcategories (source_type, source_id, subcategory) VALUES ('post', ?, ?)",
+                    (post["id"], subcat),
+                )
+
+        # Post-ED outcome (only if any ED discourse matched)
+        if has_ed:
+            for outcome in find_post_ed_outcome(text):
+                conn.execute(
+                    "INSERT OR IGNORE INTO post_ed_outcome (source_type, source_id, outcome) VALUES ('post', ?, ?)",
+                    (post["id"], outcome),
                 )
 
     conn.execute(
@@ -1113,7 +1380,9 @@ def save_comments_to_db(conn: sqlite3.Connection, post_id: str,
             )
 
         # ED discourse from comments
-        for cat in find_ed_discourse(body):
+        comment_ed_categories = find_ed_discourse(body)
+        comment_has_ed = bool(comment_ed_categories)
+        for cat in comment_ed_categories:
             conn.execute(
                 "INSERT OR IGNORE INTO ed_discourse (source_type, source_id, category) VALUES ('comment', ?, ?)",
                 (c["id"], cat),
@@ -1127,11 +1396,14 @@ def save_comments_to_db(conn: sqlite3.Connection, post_id: str,
                 (c["id"], trig, trig_cat),
             )
 
-        # Caregiver sentiment from comments
+        # Caregiver sentiment from comments (with ED linkage)
         for cat in find_caregiver_sentiment(body):
             conn.execute(
-                "INSERT OR IGNORE INTO caregiver_sentiment (source_type, source_id, category) VALUES ('comment', ?, ?)",
-                (c["id"], cat),
+                """INSERT INTO caregiver_sentiment (source_type, source_id, category, ed_related)
+                   VALUES ('comment', ?, ?, ?)
+                   ON CONFLICT(source_type, source_id, category)
+                   DO UPDATE SET ed_related = excluded.ed_related""",
+                (c["id"], cat, 1 if comment_has_ed else 0),
             )
 
         # Singulair effects from comments
@@ -1140,6 +1412,44 @@ def save_comments_to_db(conn: sqlite3.Connection, post_id: str,
                 conn.execute(
                     "INSERT OR IGNORE INTO singulair_effects (source_type, source_id, effect) VALUES ('comment', ?, ?)",
                     (c["id"], eff),
+                )
+
+        # Corticosteroid effects from comments
+        if _CORTICOSTEROID_PATTERN.search(body):
+            for eff in find_corticosteroid_effects(body):
+                conn.execute(
+                    "INSERT OR IGNORE INTO corticosteroid_effects (source_type, source_id, effect) VALUES ('comment', ?, ?)",
+                    (c["id"], eff),
+                )
+
+        # Functional impact from comments
+        for cat in find_functional_impact(body):
+            conn.execute(
+                "INSERT OR IGNORE INTO functional_impact (source_type, source_id, category) VALUES ('comment', ?, ?)",
+                (c["id"], cat),
+            )
+
+        # Inhaler confusion from comments
+        for cat in find_inhaler_confusion(body):
+            conn.execute(
+                "INSERT OR IGNORE INTO inhaler_confusion (source_type, source_id, category) VALUES ('comment', ?, ?)",
+                (c["id"], cat),
+            )
+
+        # Post-visit subcategories from comments
+        if "post_visit" in comment_ed_categories:
+            for subcat in find_post_visit_subcategories(body):
+                conn.execute(
+                    "INSERT OR IGNORE INTO ed_subcategories (source_type, source_id, subcategory) VALUES ('comment', ?, ?)",
+                    (c["id"], subcat),
+                )
+
+        # Post-ED outcome from comments
+        if comment_has_ed:
+            for outcome in find_post_ed_outcome(body):
+                conn.execute(
+                    "INSERT OR IGNORE INTO post_ed_outcome (source_type, source_id, outcome) VALUES ('comment', ?, ?)",
+                    (c["id"], outcome),
                 )
 
     conn.execute(
@@ -1556,6 +1866,204 @@ def query_singulair_discourse_counts(conn: sqlite3.Connection,
     return [(cat, cnt) for cat, cnt in counts.most_common()]
 
 
+def query_corticosteroid_effect_counts(conn: sqlite3.Connection,
+                                        date_from: Optional[float] = None,
+                                        date_to: Optional[float] = None,
+                                        subreddit: Optional[str] = None) -> list:
+    sql = "SELECT ce.effect, COUNT(DISTINCT ce.source_id) as cnt FROM corticosteroid_effects ce"
+    wheres, params = [], []
+    need_filter = date_from is not None or date_to is not None or subreddit is not None
+    if need_filter:
+        sql += """ LEFT JOIN posts p ON (ce.source_type = 'post' AND ce.source_id = p.id)
+                   LEFT JOIN comments c ON (ce.source_type = 'comment' AND ce.source_id = c.id)"""
+        if date_from is not None:
+            wheres.append("(COALESCE(p.created_utc, c.created_utc) >= ?)"); params.append(date_from)
+        if date_to is not None:
+            wheres.append("(COALESCE(p.created_utc, c.created_utc) <= ?)"); params.append(date_to)
+        if subreddit is not None:
+            wheres.append("COALESCE(p.subreddit, (SELECT p2.subreddit FROM posts p2 WHERE p2.id = c.post_id)) = ?")
+            params.append(subreddit)
+    if wheres:
+        sql += " WHERE " + " AND ".join(wheres)
+    sql += " GROUP BY ce.effect ORDER BY cnt DESC"
+    return [(r[0], r[1]) for r in conn.execute(sql, params).fetchall()]
+
+
+def query_corticosteroid_daily(conn: sqlite3.Connection,
+                                date_from: Optional[float] = None,
+                                date_to: Optional[float] = None,
+                                subreddit: Optional[str] = None) -> dict:
+    """Return {date: {effect: count}}."""
+    sql = """SELECT date(p.created_utc, 'unixepoch') as day, ce.effect, COUNT(*) as cnt
+             FROM corticosteroid_effects ce
+             JOIN posts p ON (ce.source_type = 'post' AND ce.source_id = p.id)
+             WHERE p.created_utc > 0"""
+    params = []
+    sql = _add_date_filter(sql, params, date_from, date_to)
+    if subreddit is not None:
+        sql += " AND p.subreddit = ?"; params.append(subreddit)
+    sql += " GROUP BY day, ce.effect ORDER BY day"
+    result = {}
+    for row in conn.execute(sql, params).fetchall():
+        result.setdefault(row[0], {})[row[1]] = row[2]
+    return result
+
+
+def query_functional_impact_counts(conn: sqlite3.Connection,
+                                    date_from: Optional[float] = None,
+                                    date_to: Optional[float] = None,
+                                    subreddit: Optional[str] = None) -> list:
+    sql = "SELECT fi.category, COUNT(DISTINCT fi.source_id) as cnt FROM functional_impact fi"
+    wheres, params = [], []
+    need_filter = date_from is not None or date_to is not None or subreddit is not None
+    if need_filter:
+        sql += """ LEFT JOIN posts p ON (fi.source_type = 'post' AND fi.source_id = p.id)
+                   LEFT JOIN comments c ON (fi.source_type = 'comment' AND fi.source_id = c.id)"""
+        if date_from is not None:
+            wheres.append("(COALESCE(p.created_utc, c.created_utc) >= ?)"); params.append(date_from)
+        if date_to is not None:
+            wheres.append("(COALESCE(p.created_utc, c.created_utc) <= ?)"); params.append(date_to)
+        if subreddit is not None:
+            wheres.append("COALESCE(p.subreddit, (SELECT p2.subreddit FROM posts p2 WHERE p2.id = c.post_id)) = ?")
+            params.append(subreddit)
+    if wheres:
+        sql += " WHERE " + " AND ".join(wheres)
+    sql += " GROUP BY fi.category ORDER BY cnt DESC"
+    return [(r[0], r[1]) for r in conn.execute(sql, params).fetchall()]
+
+
+def query_functional_impact_daily(conn: sqlite3.Connection,
+                                   date_from: Optional[float] = None,
+                                   date_to: Optional[float] = None,
+                                   subreddit: Optional[str] = None) -> dict:
+    """Return {date: {category: count}}."""
+    sql = """SELECT date(p.created_utc, 'unixepoch') as day, fi.category, COUNT(*) as cnt
+             FROM functional_impact fi
+             JOIN posts p ON (fi.source_type = 'post' AND fi.source_id = p.id)
+             WHERE p.created_utc > 0"""
+    params = []
+    sql = _add_date_filter(sql, params, date_from, date_to)
+    if subreddit is not None:
+        sql += " AND p.subreddit = ?"; params.append(subreddit)
+    sql += " GROUP BY day, fi.category ORDER BY day"
+    result = {}
+    for row in conn.execute(sql, params).fetchall():
+        result.setdefault(row[0], {})[row[1]] = row[2]
+    return result
+
+
+def query_inhaler_confusion_counts(conn: sqlite3.Connection,
+                                    date_from: Optional[float] = None,
+                                    date_to: Optional[float] = None,
+                                    subreddit: Optional[str] = None) -> list:
+    sql = "SELECT ic.category, COUNT(DISTINCT ic.source_id) as cnt FROM inhaler_confusion ic"
+    wheres, params = [], []
+    need_filter = date_from is not None or date_to is not None or subreddit is not None
+    if need_filter:
+        sql += """ LEFT JOIN posts p ON (ic.source_type = 'post' AND ic.source_id = p.id)
+                   LEFT JOIN comments c ON (ic.source_type = 'comment' AND ic.source_id = c.id)"""
+        if date_from is not None:
+            wheres.append("(COALESCE(p.created_utc, c.created_utc) >= ?)"); params.append(date_from)
+        if date_to is not None:
+            wheres.append("(COALESCE(p.created_utc, c.created_utc) <= ?)"); params.append(date_to)
+        if subreddit is not None:
+            wheres.append("COALESCE(p.subreddit, (SELECT p2.subreddit FROM posts p2 WHERE p2.id = c.post_id)) = ?")
+            params.append(subreddit)
+    if wheres:
+        sql += " WHERE " + " AND ".join(wheres)
+    sql += " GROUP BY ic.category ORDER BY cnt DESC"
+    return [(r[0], r[1]) for r in conn.execute(sql, params).fetchall()]
+
+
+def query_inhaler_confusion_daily(conn: sqlite3.Connection,
+                                   date_from: Optional[float] = None,
+                                   date_to: Optional[float] = None,
+                                   subreddit: Optional[str] = None) -> dict:
+    """Return {date: {category: count}}."""
+    sql = """SELECT date(p.created_utc, 'unixepoch') as day, ic.category, COUNT(*) as cnt
+             FROM inhaler_confusion ic
+             JOIN posts p ON (ic.source_type = 'post' AND ic.source_id = p.id)
+             WHERE p.created_utc > 0"""
+    params = []
+    sql = _add_date_filter(sql, params, date_from, date_to)
+    if subreddit is not None:
+        sql += " AND p.subreddit = ?"; params.append(subreddit)
+    sql += " GROUP BY day, ic.category ORDER BY day"
+    result = {}
+    for row in conn.execute(sql, params).fetchall():
+        result.setdefault(row[0], {})[row[1]] = row[2]
+    return result
+
+
+def query_ed_subcategory_counts(conn: sqlite3.Connection,
+                                 date_from: Optional[float] = None,
+                                 date_to: Optional[float] = None,
+                                 subreddit: Optional[str] = None) -> list:
+    sql = "SELECT es.subcategory, COUNT(DISTINCT es.source_id) as cnt FROM ed_subcategories es"
+    wheres, params = [], []
+    need_filter = date_from is not None or date_to is not None or subreddit is not None
+    if need_filter:
+        sql += """ LEFT JOIN posts p ON (es.source_type = 'post' AND es.source_id = p.id)
+                   LEFT JOIN comments c ON (es.source_type = 'comment' AND es.source_id = c.id)"""
+        if date_from is not None:
+            wheres.append("(COALESCE(p.created_utc, c.created_utc) >= ?)"); params.append(date_from)
+        if date_to is not None:
+            wheres.append("(COALESCE(p.created_utc, c.created_utc) <= ?)"); params.append(date_to)
+        if subreddit is not None:
+            wheres.append("COALESCE(p.subreddit, (SELECT p2.subreddit FROM posts p2 WHERE p2.id = c.post_id)) = ?")
+            params.append(subreddit)
+    if wheres:
+        sql += " WHERE " + " AND ".join(wheres)
+    sql += " GROUP BY es.subcategory ORDER BY cnt DESC"
+    return [(r[0], r[1]) for r in conn.execute(sql, params).fetchall()]
+
+
+def query_caregiver_ed_linked(conn: sqlite3.Connection,
+                               date_from: Optional[float] = None,
+                               date_to: Optional[float] = None,
+                               subreddit: Optional[str] = None) -> list:
+    """Return [(category, count)] for caregiver sentiments co-occurring with ED discourse."""
+    sql = "SELECT cs.category, COUNT(DISTINCT cs.source_id) as cnt FROM caregiver_sentiment cs"
+    wheres, params = ["cs.ed_related = 1"], []
+    need_filter = date_from is not None or date_to is not None or subreddit is not None
+    if need_filter:
+        sql += """ LEFT JOIN posts p ON (cs.source_type = 'post' AND cs.source_id = p.id)
+                   LEFT JOIN comments c ON (cs.source_type = 'comment' AND cs.source_id = c.id)"""
+        if date_from is not None:
+            wheres.append("(COALESCE(p.created_utc, c.created_utc) >= ?)"); params.append(date_from)
+        if date_to is not None:
+            wheres.append("(COALESCE(p.created_utc, c.created_utc) <= ?)"); params.append(date_to)
+        if subreddit is not None:
+            wheres.append("COALESCE(p.subreddit, (SELECT p2.subreddit FROM posts p2 WHERE p2.id = c.post_id)) = ?")
+            params.append(subreddit)
+    sql += " WHERE " + " AND ".join(wheres)
+    sql += " GROUP BY cs.category ORDER BY cnt DESC"
+    return [(r[0], r[1]) for r in conn.execute(sql, params).fetchall()]
+
+
+def query_post_ed_outcome_counts(conn: sqlite3.Connection,
+                                  date_from: Optional[float] = None,
+                                  date_to: Optional[float] = None,
+                                  subreddit: Optional[str] = None) -> list:
+    sql = "SELECT peo.outcome, COUNT(DISTINCT peo.source_id) as cnt FROM post_ed_outcome peo"
+    wheres, params = [], []
+    need_filter = date_from is not None or date_to is not None or subreddit is not None
+    if need_filter:
+        sql += """ LEFT JOIN posts p ON (peo.source_type = 'post' AND peo.source_id = p.id)
+                   LEFT JOIN comments c ON (peo.source_type = 'comment' AND peo.source_id = c.id)"""
+        if date_from is not None:
+            wheres.append("(COALESCE(p.created_utc, c.created_utc) >= ?)"); params.append(date_from)
+        if date_to is not None:
+            wheres.append("(COALESCE(p.created_utc, c.created_utc) <= ?)"); params.append(date_to)
+        if subreddit is not None:
+            wheres.append("COALESCE(p.subreddit, (SELECT p2.subreddit FROM posts p2 WHERE p2.id = c.post_id)) = ?")
+            params.append(subreddit)
+    if wheres:
+        sql += " WHERE " + " AND ".join(wheres)
+    sql += " GROUP BY peo.outcome ORDER BY cnt DESC"
+    return [(r[0], r[1]) for r in conn.execute(sql, params).fetchall()]
+
+
 def query_scrape_log(conn: sqlite3.Connection, limit: int = 20) -> list:
     rows = conn.execute("""
         SELECT strftime('%Y-%m-%dT%H:', scraped_at) ||
@@ -1888,6 +2396,15 @@ def export_all_data(conn: sqlite3.Connection) -> dict:
         "singulair_effects": query_singulair_effect_counts(conn),
         "singulair_daily": query_singulair_daily(conn),
         "singulair_discourse": query_singulair_discourse_counts(conn),
+        "corticosteroid_effects": query_corticosteroid_effect_counts(conn),
+        "corticosteroid_daily": query_corticosteroid_daily(conn),
+        "functional_impact": query_functional_impact_counts(conn),
+        "functional_impact_daily": query_functional_impact_daily(conn),
+        "inhaler_confusion": query_inhaler_confusion_counts(conn),
+        "inhaler_confusion_daily": query_inhaler_confusion_daily(conn),
+        "ed_subcategories": query_ed_subcategory_counts(conn),
+        "caregiver_ed": query_caregiver_ed_linked(conn),
+        "post_ed_outcome": query_post_ed_outcome_counts(conn),
         "stats": query_db_stats(conn),
         "validation": query_validation_stats(conn),
     }
@@ -1924,17 +2441,33 @@ def backfill_sentiment_and_effects(conn: sqlite3.Connection) -> None:
             conn.execute("UPDATE posts SET engagement_score = ? WHERE id = ?", (eng, r["id"]))
         conn.commit()
 
-    # Re-run analysis for expanded keywords
+    # Re-run analysis for expanded keywords + new modules
     rows = conn.execute(
         "SELECT id, title, selftext, subreddit FROM posts WHERE selftext != '' AND crosspost_parent IS NULL"
     ).fetchall()
     new_meds = 0
     new_beliefs = 0
+    new_peds_promoted = 0
+    new_cortico = 0
+    new_functional = 0
+    new_inhaler = 0
+    new_ed_subcat = 0
+    new_ed_outcome = 0
+    new_caregiver_ed = 0
     for r in rows:
         text = f"{r['title']} {r['selftext']}"
         peds_conf = classify_pediatric_confidence(text, r["subreddit"] or "")
+
+        # Update pediatric confidence if changed
+        conn.execute(
+            "UPDATE posts SET pediatric_confidence = ? WHERE id = ? AND pediatric_confidence != ?",
+            (peds_conf, r["id"], peds_conf))
+        if conn.execute("SELECT changes()").fetchone()[0]:
+            new_peds_promoted += 1
+
         if peds_conf == "none":
             continue
+
         for med in find_medications(text):
             med_class = MEDICATION_CLASSES.get(med, "")
             cur = conn.execute(
@@ -1950,12 +2483,81 @@ def backfill_sentiment_and_effects(conn: sqlite3.Connection) -> None:
                 (r["id"], belief, stance))
             if cur.rowcount:
                 new_beliefs += 1
-    if new_meds or new_beliefs:
-        conn.commit()
-        if new_meds:
-            log.info(f"  Found {new_meds} new medication mentions from backfill.")
-        if new_beliefs:
-            log.info(f"  Found {new_beliefs} new treatment beliefs from backfill.")
+
+        # Corticosteroid effects backfill
+        if _CORTICOSTEROID_PATTERN.search(text):
+            for eff in find_corticosteroid_effects(text):
+                cur = conn.execute(
+                    "INSERT OR IGNORE INTO corticosteroid_effects (source_type, source_id, effect) VALUES ('post', ?, ?)",
+                    (r["id"], eff))
+                if cur.rowcount:
+                    new_cortico += 1
+
+        # Functional impact backfill
+        for cat in find_functional_impact(text):
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO functional_impact (source_type, source_id, category) VALUES ('post', ?, ?)",
+                (r["id"], cat))
+            if cur.rowcount:
+                new_functional += 1
+
+        # Inhaler confusion backfill
+        for cat in find_inhaler_confusion(text):
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO inhaler_confusion (source_type, source_id, category) VALUES ('post', ?, ?)",
+                (r["id"], cat))
+            if cur.rowcount:
+                new_inhaler += 1
+
+        # ED-related backfill (subcategories, caregiver linkage, post-ED outcome)
+        ed_cats = find_ed_discourse(text)
+        has_ed = bool(ed_cats)
+
+        # Update caregiver ed_related flag
+        if has_ed:
+            cur = conn.execute(
+                "UPDATE caregiver_sentiment SET ed_related = 1 WHERE source_type = 'post' AND source_id = ? AND ed_related = 0",
+                (r["id"],))
+            if cur.rowcount:
+                new_caregiver_ed += cur.rowcount
+
+        # Post-visit subcategories
+        if "post_visit" in ed_cats:
+            for subcat in find_post_visit_subcategories(text):
+                cur = conn.execute(
+                    "INSERT OR IGNORE INTO ed_subcategories (source_type, source_id, subcategory) VALUES ('post', ?, ?)",
+                    (r["id"], subcat))
+                if cur.rowcount:
+                    new_ed_subcat += 1
+
+        # Post-ED outcome
+        if has_ed:
+            for outcome in find_post_ed_outcome(text):
+                cur = conn.execute(
+                    "INSERT OR IGNORE INTO post_ed_outcome (source_type, source_id, outcome) VALUES ('post', ?, ?)",
+                    (r["id"], outcome))
+                if cur.rowcount:
+                    new_ed_outcome += 1
+
+    conn.commit()
+    if new_meds:
+        log.info(f"  Found {new_meds} new medication mentions from backfill.")
+    if new_beliefs:
+        log.info(f"  Found {new_beliefs} new treatment beliefs from backfill.")
+    if new_peds_promoted:
+        log.info(f"  Reclassified {new_peds_promoted} posts (pediatric confidence).")
+    if new_cortico:
+        log.info(f"  Found {new_cortico} new corticosteroid effects from backfill.")
+    if new_functional:
+        log.info(f"  Found {new_functional} new functional impact entries from backfill.")
+    if new_inhaler:
+        log.info(f"  Found {new_inhaler} new inhaler confusion entries from backfill.")
+    if new_ed_subcat:
+        log.info(f"  Found {new_ed_subcat} new post-visit subcategories from backfill.")
+    if new_ed_outcome:
+        log.info(f"  Found {new_ed_outcome} new post-ED outcomes from backfill.")
+    if new_caregiver_ed:
+        log.info(f"  Updated {new_caregiver_ed} caregiver entries with ED linkage.")
 
 
 # ---------------------------------------------------------------------------

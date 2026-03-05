@@ -85,10 +85,40 @@ def export_raw_data(conn) -> dict:
         for r in conn.execute("SELECT source_type, source_id, trigger_name, trigger_category FROM triggers").fetchall()
     ]
 
-    # Caregiver sentiment: [source_type, source_id, category]
+    # Caregiver sentiment: [source_type, source_id, category, ed_related]
     caregiver = [
+        [r[0], r[1], r[2], r[3] if len(r) > 3 else 0]
+        for r in conn.execute("SELECT source_type, source_id, category, COALESCE(ed_related, 0) FROM caregiver_sentiment").fetchall()
+    ]
+
+    # Corticosteroid effects: [source_type, source_id, effect]
+    corticosteroid_effects = [
         [r[0], r[1], r[2]]
-        for r in conn.execute("SELECT source_type, source_id, category FROM caregiver_sentiment").fetchall()
+        for r in conn.execute("SELECT source_type, source_id, effect FROM corticosteroid_effects").fetchall()
+    ]
+
+    # Functional impact: [source_type, source_id, category]
+    functional_impact = [
+        [r[0], r[1], r[2]]
+        for r in conn.execute("SELECT source_type, source_id, category FROM functional_impact").fetchall()
+    ]
+
+    # Inhaler confusion: [source_type, source_id, category]
+    inhaler_confusion = [
+        [r[0], r[1], r[2]]
+        for r in conn.execute("SELECT source_type, source_id, category FROM inhaler_confusion").fetchall()
+    ]
+
+    # ED subcategories: [source_type, source_id, subcategory]
+    ed_subcategories = [
+        [r[0], r[1], r[2]]
+        for r in conn.execute("SELECT source_type, source_id, subcategory FROM ed_subcategories").fetchall()
+    ]
+
+    # Post-ED outcome: [source_type, source_id, outcome]
+    post_ed_outcome = [
+        [r[0], r[1], r[2]]
+        for r in conn.execute("SELECT source_type, source_id, outcome FROM post_ed_outcome").fetchall()
     ]
 
     # Singulair effects: [source_type, source_id, effect]
@@ -127,6 +157,11 @@ def export_raw_data(conn) -> dict:
         "caregiver": caregiver,
         "singulair": singulair,
         "singulair_disc": singulair_disc,
+        "corticosteroid_effects": corticosteroid_effects,
+        "functional_impact": functional_impact,
+        "inhaler_confusion": inhaler_confusion,
+        "ed_subcategories": ed_subcategories,
+        "post_ed_outcome": post_ed_outcome,
         "stats": stats,
         "validation_stats": validation_stats,
     }
@@ -147,6 +182,11 @@ def generate_html(data: dict) -> str:
     caregiver_json = json.dumps(data["caregiver"], separators=(",", ":"))
     singulair_json = json.dumps(data["singulair"], separators=(",", ":"))
     sing_disc_json = json.dumps(data["singulair_disc"], separators=(",", ":"))
+    cortico_json = json.dumps(data["corticosteroid_effects"], separators=(",", ":"))
+    func_json = json.dumps(data["functional_impact"], separators=(",", ":"))
+    inh_conf_json = json.dumps(data["inhaler_confusion"], separators=(",", ":"))
+    ed_subcat_json = json.dumps(data["ed_subcategories"], separators=(",", ":"))
+    ed_outcome_json = json.dumps(data["post_ed_outcome"], separators=(",", ":"))
     stats_json = json.dumps(stats, separators=(",", ":"))
     val_json = json.dumps(data["validation_stats"], separators=(",", ":"))
 
@@ -299,6 +339,7 @@ def generate_html(data: dict) -> str:
     <button class="preset-btn" onclick="setPreset(7)" id="pre7">7d</button>
     <button class="preset-btn" onclick="setPreset(30)" id="pre30">30d</button>
     <button class="preset-btn" onclick="setPreset(90)" id="pre90">90d</button>
+    <button class="preset-btn" onclick="setPreset(365)" id="pre365">1Y</button>
     <button class="preset-btn" onclick="setPreset(0)" id="pre0">All</button>
     <button class="export-btn" onclick="exportCSV()">Export CSV</button>
     <span class="updated-label">Last updated: {now}</span>
@@ -316,6 +357,12 @@ def generate_html(data: dict) -> str:
 
   <!-- Chart 1: Medication Sentiment -->
   <h3 class="section-title">Medication Mentions &amp; Sentiment</h3>
+  <div style="display:flex;gap:1.2rem;flex-wrap:wrap;font-size:.75rem;color:var(--muted);margin-bottom:.8rem;padding-left:.5rem">
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#4ade80;margin-right:4px"></span>Positive sentiment</span>
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#f06060;margin-right:4px"></span>Negative sentiment</span>
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#8b90a0;margin-right:4px"></span>Neutral</span>
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#e06090;margin-right:4px"></span>Fear score (0&ndash;1)</span>
+  </div>
   <div class="grid">
     <div class="card"><h2>Medication Mentions</h2><div id="medBar"></div></div>
     <div class="card"><h2>Sentiment by Medication</h2><div id="medSent"></div></div>
@@ -330,11 +377,19 @@ def generate_html(data: dict) -> str:
     <div class="card"><h2>Discourse Categories</h2><div id="singDisc"></div></div>
   </div>
 
+  <!-- Chart 7: Corticosteroid Side Effects -->
+  <h3 class="section-title">Corticosteroid Side Effects</h3>
+  <div class="grid">
+    <div class="card"><h2>Corticosteroid Effects</h2><div id="corticoBar"></div></div>
+  </div>
+
   <!-- Chart 2: ED Discourse -->
   <h3 class="section-title">ED / Hospital Decision-Making</h3>
   <div class="grid">
     <div class="card"><h2>ED Discourse Categories</h2><div id="edBar"></div></div>
     <div class="card"><h2>ED Discourse Trend</h2><div class="chart-container"><canvas id="edTrend"></canvas></div></div>
+    <div class="card"><h2>Post-Visit Sub-Categories</h2><div id="edSubBar"></div></div>
+    <div class="card"><h2>Post-ED Outcome (Parent-Reported)</h2><div id="edOutBar"></div></div>
   </div>
 
   <!-- Chart 3: Treatment Beliefs -->
@@ -355,6 +410,19 @@ def generate_html(data: dict) -> str:
   <div class="grid">
     <div class="card"><h2>Caregiver Sentiment</h2><div id="careBar"></div></div>
     <div class="card"><h2>Caregiver Trend</h2><div class="chart-container"><canvas id="careTrend"></canvas></div></div>
+    <div class="card"><h2>Caregiver Sentiment (ED-Related)</h2><div id="careEdBar"></div></div>
+  </div>
+
+  <!-- Chart 8: Functional Impact -->
+  <h3 class="section-title">Functional Impact</h3>
+  <div class="grid">
+    <div class="card"><h2>Functional Impact Categories</h2><div id="funcBar"></div></div>
+  </div>
+
+  <!-- Chart 9: Inhaler Confusion -->
+  <h3 class="section-title">Inhaler Confusion &amp; Technique</h3>
+  <div class="grid">
+    <div class="card"><h2>Inhaler Confusion Categories</h2><div id="inhConfBar"></div></div>
   </div>
 
   <!-- Post Explorer -->
@@ -413,6 +481,11 @@ const RAW_TRIGGERS = {triggers_json};
 const RAW_CAREGIVER = {caregiver_json};
 const RAW_SINGULAIR = {singulair_json};
 const RAW_SING_DISC = {sing_disc_json};
+const RAW_CORTICO = {cortico_json};
+const RAW_FUNC = {func_json};
+const RAW_INH_CONF = {inh_conf_json};
+const RAW_ED_SUBCAT = {ed_subcat_json};
+const RAW_ED_OUTCOME = {ed_outcome_json};
 const DB_STATS = {stats_json};
 const VAL_STATS = {val_json};
 
@@ -779,6 +852,52 @@ function renderAll() {{
   renderBarList(document.getElementById('careBar'),careCounts,(name)=>careCatColors[name]||'#7c6ef0');
   const careDaily=computeSourceDaily(posts,RAW_CAREGIVER,2);
   careTrendI=renderTrend('careTrend',careDaily,careCounts,careTrendI);
+
+  // Chart 7: Corticosteroid effects
+  const corticoLabels={{'roid_rage':'Roid Rage','mood_swings':'Mood Swings','sleep_disturbances':'Sleep Disturbances','appetite_weight':'Appetite/Weight','glucose_issues':'Glucose Issues','growth_concerns':'Growth Concerns','adrenal_suppression':'Adrenal Suppression','bone_density':'Bone Density'}};
+  const corticoCounts=computeCategoryCounts(posts,RAW_CORTICO,2);
+  const corticoDisplay=corticoCounts.map(([n,c])=>[corticoLabels[n]||n,c]);
+  renderBarList(document.getElementById('corticoBar'),corticoDisplay,()=>'#f06060');
+
+  // Chart 8: Functional impact
+  const funcLabels={{'missed_school':'Missed School','missed_work':'Missed Work (Parent)','activity_limitation':'Activity Limitation','sports_impact':'Sports Impact'}};
+  const funcCounts=computeCategoryCounts(posts,RAW_FUNC,2);
+  const funcDisplay=funcCounts.map(([n,c])=>[funcLabels[n]||n,c]);
+  renderBarList(document.getElementById('funcBar'),funcDisplay,()=>'#e06090');
+
+  // Chart 9: Inhaler confusion
+  const inhLabels={{'type_confusion':'Type Confusion','technique_issues':'Technique Issues','timing_confusion':'Timing Confusion','device_confusion':'Device Confusion'}};
+  const inhCounts=computeCategoryCounts(posts,RAW_INH_CONF,2);
+  const inhDisplay=inhCounts.map(([n,c])=>[inhLabels[n]||n,c]);
+  renderBarList(document.getElementById('inhConfBar'),inhDisplay,()=>'#40d0d0');
+
+  // Chart 10: ED subcategories
+  const edSubLabels={{'prescribed_new_med':'New Med Prescribed','diagnosis_given':'Diagnosis Given','discharge_instructions':'Discharge Instructions','satisfaction':'Care Satisfaction','still_worried':'Still Worried'}};
+  const edSubCounts=computeCategoryCounts(posts,RAW_ED_SUBCAT,2);
+  const edSubDisplay=edSubCounts.map(([n,c])=>[edSubLabels[n]||n,c]);
+  renderBarList(document.getElementById('edSubBar'),edSubDisplay,()=>'#4ade80');
+
+  // Chart 11: Post-ED outcome
+  const edOutLabels={{'improvement':'Improvement','no_improvement':'No Improvement','temporary_relief':'Temporary Relief'}};
+  const edOutColors={{'Improvement':'#4ade80','No Improvement':'#f06060','Temporary Relief':'#f0c040'}};
+  const edOutCounts=computeCategoryCounts(posts,RAW_ED_OUTCOME,2);
+  const edOutDisplay=edOutCounts.map(([n,c])=>[edOutLabels[n]||n,c]);
+  renderBarList(document.getElementById('edOutBar'),edOutDisplay,(n)=>edOutColors[n]||'#7c6ef0');
+
+  // Chart 12: Caregiver ED-linked
+  const careEdCounts={{}};
+  for (const [stype,sid,cat,edrel] of RAW_CAREGIVER) {{
+    if (!edrel) continue;
+    let include=false;
+    if (stype==='post'&&pids.has(sid)) include=true;
+    else if (stype==='comment') {{
+      const cm=RAW_COMMENTS.find(x=>x.id===sid);
+      if (cm&&pids.has(cm.post_id)) include=true;
+    }}
+    if (include) careEdCounts[cat]=(careEdCounts[cat]||0)+1;
+  }}
+  const careEdArr=Object.entries(careEdCounts).sort((a,b)=>b[1]-a[1]);
+  renderBarList(document.getElementById('careEdBar'),careEdArr,(name)=>careCatColors[name]||'#7c6ef0');
 
   // Validation stats (static)
   renderValStats();
