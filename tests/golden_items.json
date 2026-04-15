@@ -1,0 +1,138 @@
+[
+  {
+    "id": "golden_01_albuterol_addictive",
+    "source_type": "post",
+    "description": "Albuterol overuse + 'inhalers are addictive' belief, avoids controller",
+    "text": "My 6 year old has been needing his rescue inhaler almost every single day for the past 3 weeks. His pediatrician wants to start him on Flovent twice a day but I keep putting it off. My mom told me that inhalers are habit-forming and once you start a steroid inhaler you can never stop it — you get dependent on it. So I've just been giving him his albuterol when he needs it and hoping he doesn't need more. Is it true that steroid inhalers are addictive? I don't want him on something he'll need forever.",
+    "expected": {
+      "medications": ["albuterol", "flovent"],
+      "treatment_beliefs": [
+        {"belief": "Inhalers are addictive", "stance": "discordant"},
+        {"belief": "Albuterol-only reliance", "stance": "discordant"}
+      ],
+      "sentiment": 2,
+      "fear_score": 0.2,
+      "health_topics": ["Medication Adherence"]
+    }
+  },
+  {
+    "id": "golden_02_singulair_behavioral",
+    "source_type": "post",
+    "description": "Singulair behavioral side effects - nightmare + aggression + personality change",
+    "text": "We started our 5 year old daughter on Singulair (montelukast) about 3 months ago for her asthma and allergies. Within a few weeks she started having absolutely horrific nightmares — she screams in the middle of the night, completely inconsolable. She also became incredibly aggressive, hitting and biting her little brother, which she NEVER did before. Her whole personality has changed — she's not the same kid. I had no idea about the FDA black box warning until I stumbled on it Reddit. We stopped giving it to her last week and she's already improving. Why didn't her doctor warn us about this?!",
+    "expected": {
+      "medications": ["singulair"],
+      "singulair_effects": ["nightmares", "aggression", "personality changes"],
+      "caregiver_emotional_state": ["frustration"],
+      "sentiment": 1,
+      "fear_score": 0.35,
+      "health_topics": ["Sleep Disruption", "Psychosocial", "Medication Adherence"]
+    }
+  },
+  {
+    "id": "golden_03_ed_visit_story",
+    "source_type": "post",
+    "description": "Acute ED visit with fear, oxygen drop, nebulizer + prednisone treatment",
+    "text": "Just got back from the ER with my 4 year old. He woke up at 2am barely able to breathe — his lips were turning blue and I could see his ribs with every breath. I called 911 and they rushed him to the hospital. His oxygen was down to 86%. They gave him back-to-back nebulizer treatments with albuterol and then IV prednisone. After about 3 hours he stabilized. The doctor said it was a severe asthma attack and started him on Pulmicort when we were discharged. The scariest night of my life — I couldn't stop watching him breathe the whole time. Still so shaken. Still worried he's going to deteriorate again tonight.",
+    "expected": {
+      "medications": ["albuterol", "prednisone", "pulmicort", "nebulizer"],
+      "ed_discourse": ["post_visit"],
+      "caregiver_emotional_state": ["anxiety"],
+      "sentiment": 1,
+      "fear_score": 0.8,
+      "health_topics": ["ER/Hospital"]
+    }
+  },
+  {
+    "id": "golden_04_flovent_growth_fear",
+    "source_type": "post",
+    "description": "Flovent/ICS growth stunting fear, reducing dose, steroid concern",
+    "text": "My daughter's pulmonologist wants her on Flovent 110 twice a day for her moderate persistent asthma. She's 8 years old and I'm really worried about the steroids stunting her growth. I've been reading about it and I know there was a study (the CAMP trial I think?) showing only small height effects but I'm still scared. She's already petite for her age. I've been giving her half the prescribed dose to try to minimize the growth effects while still controlling the asthma. Is this a reasonable compromise? Should I be worried about steroid growth stunting from Flovent long-term?",
+    "expected": {
+      "medications": ["flovent"],
+      "side_effects": [{"effect": "Growth concerns", "medication": "Flovent"}],
+      "treatment_beliefs": [
+        {"belief": "Steroid growth stunting fear", "stance": "uncertain"}
+      ],
+      "sentiment": 2,
+      "fear_score": 0.25,
+      "health_topics": ["Growth/Development", "Medication Adherence"]
+    }
+  },
+  {
+    "id": "golden_05_trigger_identification",
+    "source_type": "post",
+    "description": "Multi-trigger identification - pollen, cold air, pets, RSV, common cold",
+    "text": "Trying to figure out what's setting off my 10 year old son's asthma so we can prevent flares. He definitely gets worse every fall — we think it's the ragweed pollen and leaves. Winter mornings are brutal because of the cold air on the way to school. Our cat is probably not helping either — he gets wheezy when he plays with her for a long time. Every time he catches a cold it goes straight to his chest and becomes a full asthma flare. Last winter he had RSV and ended up in the hospital. Dust mites in his bedroom might be an issue too — he seems worse after sleeping. Working with his allergist to nail down the triggers.",
+    "expected": {
+      "triggers": ["pollen/seasonal", "cold air", "pets", "rsv", "common cold", "dust mites"],
+      "caregiver_emotional_state": ["trust"],
+      "sentiment": 3,
+      "health_topics": ["Trigger Management", "Seasonal Patterns"]
+    }
+  },
+  {
+    "id": "golden_06_symbicort_smart",
+    "source_type": "post",
+    "description": "Symbicort SMART therapy success, game changer, empowerment",
+    "text": "Six months ago our pulmonologist switched my 12 year old son to SMART therapy with Symbicort — using it as both the controller and the reliever inhaler instead of having a separate albuterol rescue inhaler. It has been an absolute game changer. Before the switch he was using his rescue inhaler 3-4 times a week. Now we barely use it at all — maybe once or twice a month total. His asthma is so much better controlled and he understands the treatment plan really well now. I finally feel like we have his asthma under control. Our pulmonologist has been great throughout this whole process.",
+    "expected": {
+      "medications": ["symbicort", "albuterol", "smart therapy"],
+      "caregiver_emotional_state": ["trust", "empowerment"],
+      "sentiment": 5,
+      "fear_score": null,
+      "health_topics": ["Medication Adherence"]
+    }
+  },
+  {
+    "id": "golden_07_biologic_decision",
+    "source_type": "post",
+    "description": "Dupixent biologic decision, severe asthma, failed Advair/Breo, school impact, sports limitation",
+    "text": "We're seriously considering starting my 9 year old on Dupixent. She has severe persistent asthma and has failed on multiple controllers — we've tried Advair, Breo, and high-dose Pulmicort with montelukast. Her allergist says her eosinophil count is very elevated and she'd be a good candidate for a biologic. I'm nervous about a biologic injection every 2 weeks — she's only 9. But her quality of life is terrible. She's missed 18 days of school already this year. She had to quit her soccer team because she can't keep up. Has anyone's child been on Dupixent? Did it help?",
+    "expected": {
+      "medications": ["dupixent", "advair", "breo", "pulmicort", "singulair"],
+      "functional_impact": ["missed_school", "sports_impact"],
+      "sentiment": 2,
+      "fear_score": 0.3,
+      "health_topics": ["Medication Adherence", "School Impact", "Sports/Activity", "Diagnosis Journey"]
+    }
+  },
+  {
+    "id": "golden_08_caregiver_dismissed",
+    "source_type": "post",
+    "description": "Caregiver dismissed by doctor, not taken seriously, night cough, demanding referral",
+    "text": "I have been trying to get answers for my 7 year old for 4 months. He coughs every single night — wakes up coughing, coughs for an hour. I've taken him to his pediatrician three times. Every single time she brushes me off — tells me it's probably just a post-viral cough or reflux, to give him honey, to not worry so much. Last time she literally told me I was being an anxious parent and to calm down. He's been like this for 16 weeks. No one is listening to me. I finally demanded a referral to a pulmonologist and she reluctantly gave me one. I know something is wrong and I'm not going to stop until we have a diagnosis.",
+    "expected": {
+      "caregiver_emotional_state": ["dismissed", "frustration", "empowerment"],
+      "sentiment": 2,
+      "fear_score": 0.2,
+      "health_topics": ["Diagnosis Journey", "Sleep Disruption"]
+    }
+  },
+  {
+    "id": "golden_09_multi_trigger_multi_med",
+    "source_type": "post",
+    "description": "Multi-trigger + multi-medication management, peak flow monitoring, missed school",
+    "text": "Managing my 11 year old daughter's asthma is basically a full-time job. Her daily regimen is Pulmicort twice a day plus montelukast at night. When she has flares we give her albuterol with a spacer or hook her up to the nebulizer. She has a peak flow meter she uses every morning — we follow her asthma action plan based on the numbers. Her triggers are all over the place: dust mites in the bedroom (we got allergen-proof covers), the mold in our basement that we're trying to fix, cold air in winter, and any respiratory infection immediately drops into her chest. She also has the cat that we've been keeping out of her room. She missed 15 days of school last year from asthma-related absences.",
+    "expected": {
+      "medications": ["pulmicort", "singulair", "albuterol", "spacer", "nebulizer", "peak flow meter"],
+      "triggers": ["dust mites", "mold", "cold air", "respiratory infection", "pets"],
+      "functional_impact": ["missed_school"],
+      "sentiment": 3,
+      "health_topics": ["Trigger Management", "School Impact", "Medication Adherence"]
+    }
+  },
+  {
+    "id": "golden_10_school_missed_work",
+    "source_type": "post",
+    "description": "School impact + missed work (parent FMLA), activity limitation, sports benched",
+    "text": "My 8 year old's asthma has been completely out of control this semester. He's missed 9 days of school already in October and we're only halfway through the month. I've had to call out of work 6 times to pick him up from the school nurse because he's wheezing. I've burned through all my FMLA days and my boss is starting to get frustrated with me. He's on Advair and we use albuterol for rescue but it's just not cutting it. The activity limitation is really getting to him — he loves soccer and had to sit out the entire fall season because he can't keep up with the other kids. We're supposed to see the pulmonologist next week to step up treatment.",
+    "expected": {
+      "medications": ["advair", "albuterol"],
+      "functional_impact": ["missed_school", "missed_work", "sports_impact", "activity_limitation"],
+      "sentiment": 2,
+      "fear_score": 0.15,
+      "health_topics": ["School Impact", "Sports/Activity", "Parental Burden", "Medication Adherence"]
+    }
+  }
+]
