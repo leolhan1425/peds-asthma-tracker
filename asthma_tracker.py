@@ -95,6 +95,118 @@ SUBREDDITS = [
 _AUTO_PEDIATRIC_SUBS = {s["name"].lower() for s in SUBREDDITS if s.get("auto_pediatric")}
 
 # ---------------------------------------------------------------------------
+# Bot author filter (insert-time + query-time exclusion)
+# ---------------------------------------------------------------------------
+
+_KNOWN_BOT_AUTHORS = {
+    "automoderator", "sneakpeekbot", "wikitextbot", "remindmebot",
+    "limbretrieval-bot", "b0trank", "b0trankbot", "botdefs",
+    "goodbot_badbot", "converter-bot", "repostsleuthbot",
+    "sub_doesnt_exist_bot", "image_linker_bot", "properu",
+    "vredditdownloader", "substitute-bot", "gifreversingbot",
+    "anti-gif-bot", "transcribot", "haikubot-1911",
+}
+
+# Heuristic: name ends with 'bot', '-bot', or '_bot', OR contains 'bot'
+# and ends with digits. Case-insensitive.
+_BOT_HEURISTIC_RE = re.compile(
+    r"(?:^|[-_])bot$|^.*bot\d+$|^.*bot[-_]\d+$",
+    re.IGNORECASE,
+)
+
+
+def is_bot_author(author):
+    """Return 'known_bot', 'heuristic_bot', or None."""
+    if not author:
+        return None
+    a = author.strip().lower()
+    if not a or a in ("[deleted]", "[removed]"):
+        return None
+    if a in _KNOWN_BOT_AUTHORS:
+        return "known_bot"
+    if _BOT_HEURISTIC_RE.search(a):
+        return "heuristic_bot"
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Location extraction (US / non-US classification)
+# ---------------------------------------------------------------------------
+
+_US_STATES = (
+    r"alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|"
+    r"florida|georgia|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|"
+    r"maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|"
+    r"nebraska|nevada|new\s+hampshire|new\s+jersey|new\s+mexico|new\s+york|"
+    r"north\s+carolina|north\s+dakota|ohio|oklahoma|oregon|pennsylvania|"
+    r"rhode\s+island|south\s+carolina|south\s+dakota|tennessee|texas|utah|"
+    r"vermont|virginia|washington|west\s+virginia|wisconsin|wyoming"
+)
+
+# Case-sensitive state abbreviations — exclude ambiguous: IN, OR, ME, OK, HI, OH, AL
+_SAFE_STATE_ABBREVS = (
+    r"AK|AZ|AR|CA|CO|CT|DE|FL|GA|ID|IL|IA|KS|KY|LA|MD|MA|MI|MN|MS|MO|MT|"
+    r"NE|NV|NH|NJ|NM|NY|NC|ND|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY"
+)
+
+_NON_US_COUNTRIES = (
+    r"the\s+UK|United\s+Kingdom|England|Scotland|Wales|Ireland|Canada|Australia|"
+    r"New\s+Zealand|India|Germany|France|Spain|Italy|Netherlands|Belgium|Sweden|"
+    r"Norway|Denmark|Finland|Switzerland|Austria|Portugal|Brazil|Mexico|Japan|"
+    r"South\s+Korea|Philippines|Singapore|Malaysia|South\s+Africa|Nigeria|"
+    r"Poland|Czech\s+Republic|Turkey|Israel|Egypt"
+)
+
+_NATIONALITIES = (
+    r"British|Canadian|Australian|Indian|German|French|Spanish|Italian|Dutch|"
+    r"Swedish|Norwegian|Danish|Finnish|Swiss|Brazilian|Mexican|Japanese|Korean|"
+    r"Filipino|Irish|Scottish|Welsh|Kiwi|South\s+African|Nigerian|Polish|Turkish|Israeli"
+)
+
+_FIRST_PERSON_LOC = (
+    r"(?:I'?m|I\s+am|I\s+live|I'?m\s+from|I\s+live\s+in|I'?m\s+in"
+    r"|I'?m\s+based\s+in|I\s+am\s+from|I\s+am\s+in)"
+)
+
+_LOCATION_PATTERNS = [
+    re.compile(rf"{_FIRST_PERSON_LOC}\s+(?:in\s+)?(?:the\s+)?(?:US|USA|United\s+States|America)\b", re.IGNORECASE),
+    re.compile(rf"\bI'?m\s+American\b", re.IGNORECASE),
+    re.compile(rf"{_FIRST_PERSON_LOC}\s+(?:in\s+)?(?:{_US_STATES})\b", re.IGNORECASE),
+    re.compile(rf"{_FIRST_PERSON_LOC}\s+(?:in\s+)?(?:{_SAFE_STATE_ABBREVS})\b"),
+    re.compile(rf"{_FIRST_PERSON_LOC}\s+(?:in\s+)?(?:{_NON_US_COUNTRIES})\b", re.IGNORECASE),
+    re.compile(rf"\bI'?m\s+(?:{_NATIONALITIES})\b", re.IGNORECASE),
+    re.compile(r"\bmy\s+(?:GP|NHS)\b", re.IGNORECASE),
+]
+
+_LOC_PATTERN_IS_US = [True, True, True, True, False, False, False]
+
+_THIRD_PERSON_LOC_RE = re.compile(
+    r"\b(?:my\s+(?:husband|wife|partner|boyfriend|girlfriend|mom|dad|mother|father"
+    r"|sister|brother|friend|colleague|coworker|neighbor|neighbour|cousin|aunt|uncle))\s",
+    re.IGNORECASE,
+)
+
+
+def _is_third_person(snippet: str, match_start: int) -> bool:
+    """True if the location match is preceded by a third-person reference within 30 chars."""
+    prefix = snippet[max(0, match_start - 30): match_start]
+    return bool(_THIRD_PERSON_LOC_RE.search(prefix))
+
+
+def extract_location(text: str) -> Optional[str]:
+    """Extract US/non-US location from first 500 chars of post text.
+    Returns 'us', 'non_us', or None."""
+    if not text:
+        return None
+    snippet = text[:500]
+    for idx, pat in enumerate(_LOCATION_PATTERNS):
+        m = pat.search(snippet)
+        if m and not _is_third_person(snippet, m.start()):
+            return 'us' if _LOC_PATTERN_IS_US[idx] else 'non_us'
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Two-stage content gate
 # ---------------------------------------------------------------------------
 
@@ -728,9 +840,12 @@ _NEGATORS = {"not", "no", "never", "don't", "didn't", "doesn't", "wasn't", "were
 _NEGATION_WINDOW = 3
 
 
-def score_sentiment(text: str) -> Optional[float]:
-    """Score text sentiment from -1.0 (very negative) to +1.0 (very positive).
-    Returns None if no sentiment words found."""
+def score_sentiment(text: str) -> Optional[int]:
+    """Score text sentiment on a 1-5 Likert scale.
+    Returns None if no sentiment words found.
+    Scale: 1=Very Negative, 2=Negative, 3=Neutral, 4=Positive, 5=Very Positive.
+    Internally computes -1.0 to +1.0 then maps: round(raw * 2 + 3).
+    """
     if not text:
         return None
     words = re.findall(r"[a-z']+", text.lower())
@@ -778,7 +893,23 @@ def score_sentiment(text: str) -> Optional[float]:
     raw = (pos_score - neg_score) / total
     confidence = min(1.0, 1.0 - 1.0 / (1.0 + word_count * 0.7))
     dampened = raw * confidence
-    return max(-1.0, min(1.0, round(dampened, 4)))
+    clamped = max(-1.0, min(1.0, dampened))
+    return round(clamped * 2 + 3)  # 1-5 Likert: -1→1, 0→3, 1→5
+
+
+def _sentiment_bucket(score: int) -> str:
+    """Map a 1-5 Likert score to a named bucket for Cohen's kappa."""
+    if score is None:
+        return 'Neutral'
+    if score <= 1:
+        return 'Very Negative'
+    if score == 2:
+        return 'Negative'
+    if score == 3:
+        return 'Neutral'
+    if score == 4:
+        return 'Positive'
+    return 'Very Positive'
 
 
 def score_fear(text: str) -> Optional[float]:
@@ -1085,13 +1216,47 @@ def get_db(path: Optional[Path] = None) -> sqlite3.Connection:
         CREATE INDEX IF NOT EXISTS idx_sentv_comment ON sentiment_votes(comment_id);
         CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status);
         CREATE INDEX IF NOT EXISTS idx_feedback_votes_fid ON feedback_votes(feedback_id);
+
+        CREATE TABLE IF NOT EXISTS bot_filter_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scraped_at TEXT NOT NULL DEFAULT (datetime('now')),
+            source_id TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            author TEXT,
+            subreddit TEXT,
+            reason TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_bot_filter_reason ON bot_filter_log(reason);
+        CREATE INDEX IF NOT EXISTS idx_bot_filter_author ON bot_filter_log(author);
+
+        CREATE TABLE IF NOT EXISTS validation_core_items (
+            facet TEXT NOT NULL,
+            item_id TEXT NOT NULL,
+            item_type TEXT NOT NULL,
+            PRIMARY KEY (facet, item_id)
+        );
     """)
     # Add ed_related column to caregiver_sentiment if not present
     try:
         conn.execute("ALTER TABLE caregiver_sentiment ADD COLUMN ed_related INTEGER DEFAULT 0")
     except sqlite3.OperationalError:
         pass  # Column already exists
+    # Add location column to posts if not present
+    try:
+        conn.execute("ALTER TABLE posts ADD COLUMN location TEXT")
+    except sqlite3.OperationalError:
+        pass
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_posts_location ON posts(location)")
+    # --- Sentiment scale migration: float (-1/+1) → 1-5 Likert integer ---
+    # Guard: only convert values still in [-1, 1] range (skip if already 1-5)
+    for tbl in ('posts', 'comments'):
+        conn.execute(f"""
+            UPDATE {tbl} SET sentiment = ROUND(sentiment * 2 + 3)
+            WHERE sentiment IS NOT NULL AND sentiment >= -1.0 AND sentiment <= 1.0
+        """)
+    conn.commit()
     conn.row_factory = sqlite3.Row
+    _ensure_core_items_selected(conn)
     return conn
 
 
@@ -1209,13 +1374,15 @@ def save_posts_to_db(conn: sqlite3.Connection, posts: list,
         sub = post.get("subreddit", subreddit)
         peds_conf = classify_pediatric_confidence(text, sub)
         child_age = extract_child_age(text)
+        location = extract_location(text)
 
         cur = conn.execute(
             """INSERT INTO posts (id, title, selftext, created_utc, score,
                                   num_comments, permalink, first_seen, sentiment,
                                   fear_score, subreddit, engagement_score, sort_source,
-                                  crosspost_parent, pediatric_confidence, child_age_mentioned)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                  crosspost_parent, pediatric_confidence, child_age_mentioned,
+                                  location)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(id) DO UPDATE SET
                    score = excluded.score,
                    num_comments = excluded.num_comments,
@@ -1227,7 +1394,7 @@ def save_posts_to_db(conn: sqlite3.Connection, posts: list,
             (post["id"], post["title"], post["selftext"],
              post["created_utc"], post["score"], post["num_comments"],
              post["permalink"], now, sent, fear,
-             sub, eng, sort_src, xpost, peds_conf, child_age),
+             sub, eng, sort_src, xpost, peds_conf, child_age, location),
         )
         if cur.lastrowid:
             new_count += 1
@@ -1348,7 +1515,22 @@ def save_comments_to_db(conn: sqlite3.Connection, post_id: str,
     """Save scraped comments with sentiment, fear, and analysis."""
     now = datetime.utcnow().isoformat()
     new_count = 0
+    parent_sub_row = conn.execute(
+        "SELECT subreddit FROM posts WHERE id = ?", (post_id,)
+    ).fetchone()
+    parent_sub = parent_sub_row[0] if parent_sub_row else None
     for c in comments:
+        # Bot filter: skip and log known/heuristic bot authors
+        bot_reason = is_bot_author(c.get("author", ""))
+        if bot_reason:
+            conn.execute(
+                """INSERT INTO bot_filter_log
+                   (source_id, source_type, author, subreddit, reason)
+                   VALUES (?, 'comment', ?, ?, ?)""",
+                (c["id"], c.get("author", ""), parent_sub, bot_reason),
+            )
+            continue
+
         body = c.get("body", "")
         sent = score_sentiment(body)
         fear = score_fear(body)
@@ -1575,7 +1757,8 @@ def query_db_stats(conn: sqlite3.Connection,
 
 
 def query_top_posts(conn: sqlite3.Connection, medication: str,
-                    limit: int = 20, date_from: Optional[float] = None,
+                    limit: int = 30, offset: int = 0,
+                    date_from: Optional[float] = None,
                     date_to: Optional[float] = None,
                     subreddit: Optional[str] = None) -> list:
     sql = """SELECT p.id, p.title, p.selftext, p.created_utc, p.score,
@@ -1587,8 +1770,8 @@ def query_top_posts(conn: sqlite3.Connection, medication: str,
     sql = _add_date_filter(sql, params, date_from, date_to)
     if subreddit is not None:
         sql += " AND p.subreddit = ?"; params.append(subreddit)
-    sql += " ORDER BY p.engagement_score DESC LIMIT ?"
-    params.append(limit)
+    sql += " ORDER BY p.engagement_score DESC LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
     return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
 
@@ -2097,43 +2280,203 @@ def query_scrape_log(conn: sqlite3.Connection, limit: int = 20) -> list:
 # Validation system (3 facets: beliefs, side effects, sentiment)
 # ---------------------------------------------------------------------------
 
+import random as _random
+
+
+def _time_stratified_sample(rows: list, count: int) -> list:
+    """Sample rows with time diversity: split into 3 terciles by created_utc,
+    sample ~equal from each. Fallback: just return all rows if not enough."""
+    if len(rows) <= count:
+        return list(rows)
+    sorted_rows = sorted(rows, key=lambda r: (r['created_utc'] or 0))
+    n = len(sorted_rows)
+    terciles = [sorted_rows[:n // 3], sorted_rows[n // 3:2 * n // 3], sorted_rows[2 * n // 3:]]
+    per_tercile = count // 3
+    remainder = count - per_tercile * 3
+    result = []
+    shortfall = 0
+    for i, t in enumerate(terciles):
+        want = per_tercile + (1 if i < remainder else 0)
+        if len(t) >= want:
+            result.extend(_random.sample(t, want))
+        else:
+            result.extend(t)
+            shortfall += want - len(t)
+    if shortfall > 0:
+        used_ids = {id(r) for r in result}
+        pool = [r for r in sorted_rows if id(r) not in used_ids]
+        result.extend(_random.sample(pool, min(shortfall, len(pool))))
+    return result
+
+
+def _ensure_core_items_selected(conn: sqlite3.Connection):
+    """One-time selection of core validation items for the tiered pool strategy.
+
+    Core items are shown to EVERY validator (for inter-rater reliability).
+    Exploration items fill the rest of each batch (for coverage).
+    Idempotent — only populates if validation_core_items is empty.
+    """
+    existing = conn.execute(
+        "SELECT COUNT(*) FROM validation_core_items"
+    ).fetchone()[0]
+    if existing > 0:
+        return  # Already populated
+
+    log.info("Selecting core validation items (one-time)...")
+
+    bot_exclude = """AND (c.author IS NULL OR (
+          LOWER(c.author) NOT IN ({known})
+          AND c.author NOT GLOB '*[Bb]ot'
+          AND c.author NOT GLOB '*-[Bb]ot'
+          AND c.author NOT GLOB '*_[Bb]ot'
+        ))""".format(known=",".join(f"'{a}'" for a in _KNOWN_BOT_AUTHORS))
+
+    # --- Treatment beliefs: 80 posts, balanced flagged/unflagged ---
+    tb_flagged = conn.execute("""
+        SELECT DISTINCT p.id, p.created_utc
+        FROM posts p
+        JOIN treatment_beliefs tb ON tb.source_type = 'post' AND tb.source_id = p.id
+        JOIN medication_mentions mm ON mm.post_id = p.id
+        WHERE length(p.selftext) > 30
+        LIMIT 300
+    """).fetchall()
+    tb_unflagged = conn.execute("""
+        SELECT DISTINCT p.id, p.created_utc
+        FROM posts p
+        JOIN medication_mentions mm ON mm.post_id = p.id
+        WHERE p.id NOT IN (SELECT source_id FROM treatment_beliefs WHERE source_type = 'post')
+          AND length(p.selftext) > 30
+        LIMIT 300
+    """).fetchall()
+    n_flagged = min(40, len(tb_flagged))
+    n_unflagged = min(80 - n_flagged, len(tb_unflagged))
+    if n_flagged + n_unflagged < 80 and len(tb_flagged) > n_flagged:
+        n_flagged = min(80 - n_unflagged, len(tb_flagged))
+    tb_f = _time_stratified_sample(tb_flagged, n_flagged)
+    tb_u = _time_stratified_sample(tb_unflagged, n_unflagged)
+    for r in list(tb_f) + list(tb_u):
+        conn.execute(
+            "INSERT OR IGNORE INTO validation_core_items (facet, item_id, item_type) VALUES ('beliefs', ?, 'post')",
+            (r['id'],))
+    log.info(f"  Beliefs core: {len(tb_f) + len(tb_u)} posts ({len(tb_f)} flagged, {len(tb_u)} unflagged)")
+
+    # --- Side effects: 80 comments, 48 with effects + 32 without ---
+    se_with_pool = conn.execute(f"""
+        SELECT DISTINCT c.id, c.created_utc
+        FROM comments c
+        JOIN side_effects se ON se.source_type = 'comment' AND se.source_id = c.id
+        WHERE length(c.body) > 20 {bot_exclude}
+        LIMIT 500
+    """).fetchall()
+    se_without_pool = conn.execute(f"""
+        SELECT c.id, c.created_utc
+        FROM comments c
+        WHERE c.id NOT IN (SELECT source_id FROM side_effects WHERE source_type = 'comment')
+          AND length(c.body) > 20 {bot_exclude}
+        LIMIT 500
+    """).fetchall()
+    se_with = _time_stratified_sample(se_with_pool, min(48, len(se_with_pool)))
+    se_without = _time_stratified_sample(se_without_pool, min(32, len(se_without_pool)))
+    for r in list(se_with) + list(se_without):
+        conn.execute(
+            "INSERT OR IGNORE INTO validation_core_items (facet, item_id, item_type) VALUES ('side_effects', ?, 'comment')",
+            (r['id'],))
+    log.info(f"  Side effects core: {len(se_with) + len(se_without)} comments ({len(se_with)} with, {len(se_without)} without)")
+
+    # --- Sentiment: 80 comments, 16 neg + 16 neutral + 16 pos + 32 random ---
+    sent_base = f"""
+        SELECT DISTINCT c.id, c.created_utc, c.sentiment
+        FROM comments c
+        JOIN posts p ON p.id = c.post_id
+        JOIN medication_mentions m ON m.post_id = p.id
+        WHERE c.sentiment IS NOT NULL AND length(c.body) > 20
+        {bot_exclude}
+    """
+    neg_pool = conn.execute(sent_base + " AND c.sentiment <= 2 LIMIT 200").fetchall()
+    neut_pool = conn.execute(sent_base + " AND c.sentiment = 3 LIMIT 200").fetchall()
+    pos_pool = conn.execute(sent_base + " AND c.sentiment >= 4 LIMIT 200").fetchall()
+    all_pool = conn.execute(sent_base + " LIMIT 500").fetchall()
+
+    neg = _time_stratified_sample(neg_pool, min(16, len(neg_pool)))
+    neut = _time_stratified_sample(neut_pool, min(16, len(neut_pool)))
+    pos = _time_stratified_sample(pos_pool, min(16, len(pos_pool)))
+    got_ids = {r['id'] for r in list(neg) + list(neut) + list(pos)}
+    remaining_pool = [r for r in all_pool if r['id'] not in got_ids]
+    rand = _time_stratified_sample(remaining_pool, min(32, len(remaining_pool)))
+    for r in list(neg) + list(neut) + list(pos) + list(rand):
+        conn.execute(
+            "INSERT OR IGNORE INTO validation_core_items (facet, item_id, item_type) VALUES ('sentiment', ?, 'comment')",
+            (r['id'],))
+    log.info(f"  Sentiment core: {len(neg) + len(neut) + len(pos) + len(rand)} comments")
+
+    conn.commit()
+    log.info("Core validation items selected.")
+
+
 def get_validation_batch(conn: sqlite3.Connection, validator: str,
                          count: int = 10) -> list:
-    """Get posts for treatment beliefs validation: half flagged, half unflagged."""
-    half = count // 2
-    flagged = conn.execute("""
-        SELECT DISTINCT p.id, p.title, substr(p.selftext, 1, 2000) as selftext, p.subreddit
+    """Get posts for treatment beliefs validation using tiered pool strategy.
+
+    Tier 1 (core): pre-selected items shown to ALL validators for inter-rater
+    reliability. Up to 3 core items per batch, no retirement cap.
+    Tier 2 (exploration): remaining pool, retired after 2 votes.
+    """
+    # --- Tier 1: Core items (no retirement cap) ---
+    core_pool = conn.execute("""
+        SELECT DISTINCT p.id, p.title, substr(p.selftext, 1, 2000) as selftext,
+               p.subreddit, p.created_utc
+        FROM posts p
+        JOIN validation_core_items vci ON vci.item_id = p.id AND vci.facet = 'beliefs'
+        WHERE p.id NOT IN (SELECT post_id FROM validation_votes WHERE validator = ?)
+          AND length(p.selftext) > 30
+    """, (validator,)).fetchall()
+    core_sample = _time_stratified_sample(core_pool, min(3, len(core_pool)))
+
+    # --- Tier 2: Exploration items (retire after 2 votes) ---
+    remaining = count - len(core_sample)
+    explore_cap = "AND (SELECT COUNT(*) FROM validation_votes WHERE post_id = p.id) < 2"
+    core_exclude = "AND p.id NOT IN (SELECT item_id FROM validation_core_items WHERE facet = 'beliefs')"
+    half = remaining // 2
+    other_half = remaining - half
+
+    flagged_pool = conn.execute(f"""
+        SELECT DISTINCT p.id, p.title, substr(p.selftext, 1, 2000) as selftext,
+               p.subreddit, p.created_utc
         FROM posts p
         JOIN treatment_beliefs tb ON tb.source_type = 'post' AND tb.source_id = p.id
         JOIN medication_mentions mm ON mm.post_id = p.id
         WHERE p.id NOT IN (SELECT post_id FROM validation_votes WHERE validator = ?)
           AND length(p.selftext) > 30
-        ORDER BY RANDOM() LIMIT ?
-    """, (validator, half)).fetchall()
+          {explore_cap}
+          {core_exclude}
+        LIMIT 300
+    """, (validator,)).fetchall()
+    flagged = _time_stratified_sample(flagged_pool, half)
 
-    unflagged = conn.execute("""
-        SELECT DISTINCT p.id, p.title, substr(p.selftext, 1, 2000) as selftext, p.subreddit
+    unflagged_pool = conn.execute(f"""
+        SELECT DISTINCT p.id, p.title, substr(p.selftext, 1, 2000) as selftext,
+               p.subreddit, p.created_utc
         FROM posts p
         JOIN medication_mentions mm ON mm.post_id = p.id
         WHERE p.id NOT IN (SELECT source_id FROM treatment_beliefs WHERE source_type = 'post')
           AND p.id NOT IN (SELECT post_id FROM validation_votes WHERE validator = ?)
           AND length(p.selftext) > 30
-        ORDER BY RANDOM() LIMIT ?
-    """, (validator, half)).fetchall()
+          {explore_cap}
+          {core_exclude}
+        LIMIT 300
+    """, (validator,)).fetchall()
+    unflagged = _time_stratified_sample(unflagged_pool, other_half)
 
-    if len(flagged) < half:
-        extra = conn.execute("""
-            SELECT DISTINCT p.id, p.title, substr(p.selftext, 1, 2000) as selftext, p.subreddit
-            FROM posts p JOIN medication_mentions mm ON mm.post_id = p.id
-            WHERE p.id NOT IN (SELECT source_id FROM treatment_beliefs WHERE source_type = 'post')
-              AND p.id NOT IN (SELECT post_id FROM validation_votes WHERE validator = ?)
-              AND length(p.selftext) > 30
-            ORDER BY RANDOM() LIMIT ?
-        """, (validator, half - len(flagged))).fetchall()
-        unflagged = list(unflagged) + list(extra)
+    # Backfill if one side is short
+    if len(flagged) < half and len(unflagged_pool) > len(unflagged):
+        extra_pool = [r for r in unflagged_pool if r['id'] not in {x['id'] for x in unflagged}]
+        unflagged = list(unflagged) + list(_time_stratified_sample(extra_pool, half - len(flagged)))
+    elif len(unflagged) < other_half and len(flagged_pool) > len(flagged):
+        extra_pool = [r for r in flagged_pool if r['id'] not in {x['id'] for x in flagged}]
+        flagged = list(flagged) + list(_time_stratified_sample(extra_pool, other_half - len(unflagged)))
 
     result = []
-    for r in list(flagged) + list(unflagged):
+    for r in list(core_sample) + list(flagged) + list(unflagged):
         claims = conn.execute(
             "SELECT belief, stance FROM treatment_beliefs WHERE source_type = 'post' AND source_id = ?",
             (r["id"],)).fetchall()
@@ -2144,6 +2487,7 @@ def get_validation_batch(conn: sqlite3.Connection, validator: str,
             "subreddit": r["subreddit"], "system_flagged": system_flagged,
             "system_claims": system_claims,
         })
+    _random.shuffle(result)
     return result
 
 
@@ -2168,57 +2512,202 @@ def save_validation_votes(conn: sqlite3.Connection, validator: str, votes: list)
 
 
 def query_validation_stats(conn: sqlite3.Connection) -> dict:
-    rows = conn.execute("SELECT * FROM validation_votes").fetchall()
+    """Compute validation statistics: precision/recall/F1 and Scott's Pi.
+
+    Scott's Pi is computed over posts rated by 2+ validators (multi-rater
+    inter-rater reliability). Unlike the marginal approach, this counts observed
+    agreement per post pair and accounts for marginal chance agreement.
+    """
+    rows = conn.execute(
+        "SELECT system_flagged, human_flagged, system_claims, post_id, validator FROM validation_votes"
+    ).fetchall()
     if not rows:
-        return {"total_votes": 0}
+        empty = {'agreement_rate': None, 'precision': None, 'recall': None, 'f1': None,
+                 'confusion': {'tp': 0, 'fp': 0, 'fn': 0, 'tn': 0}, 'n': 0}
+        return {
+            'total_votes': 0, 'total_validators': 0,
+            'agreement_rate': None, 'precision': None, 'recall': None, 'f1': None,
+            'confusion_matrix': {'tp': 0, 'fp': 0, 'fn': 0, 'tn': 0},
+            'per_claim': [], 'scotts_pi': None, 'recent_disagreements': [],
+        }
+
     total = len(rows)
-    agree = sum(1 for r in rows if r["system_flagged"] == r["human_flagged"])
-    tp = sum(1 for r in rows if r["system_flagged"] == 1 and r["human_flagged"] == 1)
-    fp = sum(1 for r in rows if r["system_flagged"] == 1 and r["human_flagged"] == 0)
-    fn = sum(1 for r in rows if r["system_flagged"] == 0 and r["human_flagged"] == 1)
-    tn = sum(1 for r in rows if r["system_flagged"] == 0 and r["human_flagged"] == 0)
+    tp = sum(1 for r in rows if r['system_flagged'] == 1 and r['human_flagged'] == 1)
+    fp = sum(1 for r in rows if r['system_flagged'] == 1 and r['human_flagged'] == 0)
+    fn = sum(1 for r in rows if r['system_flagged'] == 0 and r['human_flagged'] == 1)
+    tn = sum(1 for r in rows if r['system_flagged'] == 0 and r['human_flagged'] == 0)
+    agree = tp + tn
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
-    p_yes = ((tp + fp) + (tp + fn)) / (2 * total) if total else 0
-    p_no = 1 - p_yes
-    pe = p_yes ** 2 + p_no ** 2
-    po = agree / total if total else 0
-    scotts_pi = (po - pe) / (1 - pe) if pe < 1 else 0
+    agreement_rate = agree / total if total else 0
+
+    # Per-claim accuracy
+    claim_stats: dict = {}
+    for r in rows:
+        if r['system_claims']:
+            try:
+                claims_data = json.loads(r['system_claims'])
+            except (json.JSONDecodeError, TypeError):
+                claims_data = []
+            for item in claims_data:
+                belief = item.get('belief') if isinstance(item, dict) else str(item)
+                if belief:
+                    if belief not in claim_stats:
+                        claim_stats[belief] = {'agreed': 0, 'total': 0}
+                    claim_stats[belief]['total'] += 1
+                    if r['human_flagged'] == 1:
+                        claim_stats[belief]['agreed'] += 1
+    per_claim = [
+        {'claim': c, 'agreed': s['agreed'], 'total': s['total'],
+         'accuracy': round(s['agreed'] / s['total'], 3) if s['total'] else 0}
+        for c, s in sorted(claim_stats.items(), key=lambda x: -x[1]['total'])
+    ]
+
+    # Scott's Pi — only posts rated by 2+ validators (multi-rater reliability)
+    post_votes: dict = {}
+    for r in rows:
+        pid = r['post_id']
+        if pid not in post_votes:
+            post_votes[pid] = []
+        post_votes[pid].append(r['human_flagged'])
+
+    multi_rated = {pid: votes for pid, votes in post_votes.items() if len(votes) >= 2}
+    scotts_pi = None
+    if multi_rated:
+        n_pairs = 0
+        observed_agree = 0
+        total_yes = 0
+        total_no = 0
+        total_judgments = 0
+        for pid, votes in multi_rated.items():
+            for i in range(len(votes)):
+                for j in range(i + 1, len(votes)):
+                    n_pairs += 1
+                    if votes[i] == votes[j]:
+                        observed_agree += 1
+            for v in votes:
+                total_judgments += 1
+                if v == 1:
+                    total_yes += 1
+                else:
+                    total_no += 1
+        if n_pairs > 0 and total_judgments > 0:
+            p_observed = observed_agree / n_pairs
+            p_yes = total_yes / total_judgments
+            p_no = total_no / total_judgments
+            p_expected = p_yes ** 2 + p_no ** 2
+            if p_expected < 1:
+                scotts_pi = round((p_observed - p_expected) / (1 - p_expected), 3)
+
+    # Recent disagreements
+    disagreements = conn.execute("""
+        SELECT vv.post_id, vv.validator, vv.system_flagged, vv.human_flagged,
+               vv.reason, vv.system_claims, vv.voted_at, p.title
+        FROM validation_votes vv
+        JOIN posts p ON p.id = vv.post_id
+        WHERE vv.system_flagged != vv.human_flagged
+        ORDER BY vv.voted_at DESC LIMIT 10
+    """).fetchall()
+
+    total_validators = conn.execute(
+        "SELECT COUNT(DISTINCT validator) FROM validation_votes"
+    ).fetchone()[0]
+
     return {
-        "total_votes": total, "agreement_rate": round(po * 100, 1),
-        "precision": round(precision, 3), "recall": round(recall, 3), "f1": round(f1, 3),
-        "confusion_matrix": {"tp": tp, "fp": fp, "fn": fn, "tn": tn},
-        "scotts_pi": round(scotts_pi, 3),
+        'total_votes': total,
+        'total_validators': total_validators,
+        'agreement_rate': round(agreement_rate * 100, 1),
+        'precision': round(precision, 3),
+        'recall': round(recall, 3),
+        'f1': round(f1, 3),
+        'confusion_matrix': {'tp': tp, 'fp': fp, 'fn': fn, 'tn': tn},
+        'per_claim': per_claim,
+        'scotts_pi': scotts_pi,
+        'recent_disagreements': [
+            {'post_id': d['post_id'], 'validator': d['validator'],
+             'system_flagged': d['system_flagged'], 'human_flagged': d['human_flagged'],
+             'reason': d['reason'], 'system_claims': d['system_claims'],
+             'voted_at': d['voted_at'], 'title': d['title']}
+            for d in disagreements
+        ],
     }
 
 
 def get_side_effect_batch(conn: sqlite3.Connection, validator: str,
                           count: int = 5) -> list:
-    with_effects = conn.execute("""
-        SELECT DISTINCT c.id as comment_id, c.body, c.post_id, p.title as post_title, p.subreddit
+    """Get a batch of comments for side-effect validation using tiered pool.
+
+    Tier 1 (core): up to 3 pre-selected items per batch, no retirement cap.
+    Tier 2 (exploration): fills rest with 60/40 with/without effects, retires at 2.
+    """
+    bot_exclude = """AND (c.author IS NULL OR (
+          LOWER(c.author) NOT IN ({known})
+          AND c.author NOT GLOB '*[Bb]ot'
+          AND c.author NOT GLOB '*-[Bb]ot'
+          AND c.author NOT GLOB '*_[Bb]ot'
+        ))""".format(known=",".join(f"'{a}'" for a in _KNOWN_BOT_AUTHORS))
+
+    # --- Tier 1: Core items (no retirement cap) ---
+    core_pool = conn.execute(f"""
+        SELECT DISTINCT c.id as comment_id, substr(c.body, 1, 2000) as body, c.post_id,
+               p.title as post_title, p.subreddit, c.created_utc
         FROM comments c
+        JOIN validation_core_items vci ON vci.item_id = c.id AND vci.facet = 'side_effects'
         JOIN posts p ON p.id = c.post_id
-        JOIN medication_mentions mm ON mm.post_id = p.id
-        JOIN side_effects se ON se.source_type = 'comment' AND se.source_id = c.id
         WHERE c.id NOT IN (SELECT comment_id FROM side_effect_votes WHERE validator = ?)
           AND length(c.body) > 20
-        ORDER BY RANDOM() LIMIT ?
-    """, (validator, 3)).fetchall()
+          {bot_exclude}
+    """, (validator,)).fetchall()
+    core_sample = _time_stratified_sample(core_pool, min(3, len(core_pool)))
 
-    without_effects = conn.execute("""
-        SELECT DISTINCT c.id as comment_id, c.body, c.post_id, p.title as post_title, p.subreddit
+    # --- Tier 2: Exploration items (retire after 2 votes) ---
+    remaining = count - len(core_sample)
+    explore_cap = "AND (SELECT COUNT(*) FROM side_effect_votes WHERE comment_id = c.id) < 2"
+    core_exclude = "AND c.id NOT IN (SELECT item_id FROM validation_core_items WHERE facet = 'side_effects')"
+    with_count = (remaining * 3 + 4) // 5
+    without_count = remaining - with_count
+
+    with_pool = conn.execute(f"""
+        SELECT DISTINCT c.id as comment_id, substr(c.body, 1, 2000) as body, c.post_id,
+               p.title as post_title, p.subreddit, c.created_utc
+        FROM comments c
+        JOIN side_effects se ON se.source_type = 'comment' AND se.source_id = c.id
+        JOIN posts p ON p.id = c.post_id
+        WHERE c.id NOT IN (SELECT comment_id FROM side_effect_votes WHERE validator = ?)
+          AND length(c.body) > 20
+          {explore_cap}
+          {core_exclude}
+          {bot_exclude}
+        LIMIT 300
+    """, (validator,)).fetchall()
+    with_effects = _time_stratified_sample(with_pool, with_count)
+
+    without_pool = conn.execute(f"""
+        SELECT c.id as comment_id, substr(c.body, 1, 2000) as body, c.post_id,
+               p.title as post_title, p.subreddit, c.created_utc
         FROM comments c
         JOIN posts p ON p.id = c.post_id
-        JOIN medication_mentions mm ON mm.post_id = p.id
         WHERE c.id NOT IN (SELECT source_id FROM side_effects WHERE source_type = 'comment')
           AND c.id NOT IN (SELECT comment_id FROM side_effect_votes WHERE validator = ?)
           AND length(c.body) > 20
-        ORDER BY RANDOM() LIMIT ?
-    """, (validator, 2)).fetchall()
+          {explore_cap}
+          {core_exclude}
+          {bot_exclude}
+        LIMIT 300
+    """, (validator,)).fetchall()
+    without_effects = _time_stratified_sample(without_pool, without_count)
+
+    # Backfill if either type runs short
+    if len(with_effects) < with_count and len(without_pool) > len(without_effects):
+        extra = [r for r in without_pool if r['comment_id'] not in {x['comment_id'] for x in without_effects}]
+        without_effects = list(without_effects) + list(_time_stratified_sample(extra, with_count - len(with_effects)))
+    elif len(without_effects) < without_count and len(with_pool) > len(with_effects):
+        extra = [r for r in with_pool if r['comment_id'] not in {x['comment_id'] for x in with_effects}]
+        with_effects = list(with_effects) + list(_time_stratified_sample(extra, without_count - len(without_effects)))
 
     result = []
-    for r in list(with_effects) + list(without_effects):
+    for r in list(core_sample) + list(with_effects) + list(without_effects):
         sys_effects = conn.execute(
             "SELECT effect FROM side_effects WHERE source_type = 'comment' AND source_id = ?",
             (r["comment_id"],)).fetchall()
@@ -2228,6 +2717,7 @@ def get_side_effect_batch(conn: sqlite3.Connection, validator: str,
             "subreddit": r["subreddit"],
             "system_effects": json.dumps([e["effect"] for e in sys_effects]),
         })
+    _random.shuffle(result)
     return result
 
 
@@ -2285,54 +2775,80 @@ def query_side_effect_validation_stats(conn: sqlite3.Connection) -> dict:
 
 def get_sentiment_batch(conn: sqlite3.Connection, validator: str,
                         count: int = 5) -> list:
-    negative = conn.execute("""
-        SELECT c.id as comment_id, c.body, c.post_id, p.title as post_title, p.subreddit, c.sentiment
-        FROM comments c JOIN posts p ON p.id = c.post_id
-        JOIN medication_mentions mm ON mm.post_id = p.id
-        WHERE c.sentiment < -0.2
-          AND c.id NOT IN (SELECT comment_id FROM sentiment_votes WHERE validator = ?)
-          AND length(c.body) > 20
-        ORDER BY RANDOM() LIMIT 1
-    """, (validator,)).fetchall()
+    """Get a batch of comments for sentiment validation using tiered pool.
 
-    neutral = conn.execute("""
-        SELECT c.id as comment_id, c.body, c.post_id, p.title as post_title, p.subreddit, c.sentiment
-        FROM comments c JOIN posts p ON p.id = c.post_id
-        JOIN medication_mentions mm ON mm.post_id = p.id
-        WHERE c.sentiment BETWEEN -0.2 AND 0.2
-          AND c.id NOT IN (SELECT comment_id FROM sentiment_votes WHERE validator = ?)
-          AND length(c.body) > 20
-        ORDER BY RANDOM() LIMIT 1
-    """, (validator,)).fetchall()
+    Tier 1 (core): up to 3 pre-selected items per batch, no retirement cap.
+    Tier 2 (exploration): sentiment-balanced (neg/neutral/pos), retires at 2.
+    """
+    bot_exclude = """AND (c.author IS NULL OR (
+          LOWER(c.author) NOT IN ({known})
+          AND c.author NOT GLOB '*[Bb]ot'
+          AND c.author NOT GLOB '*-[Bb]ot'
+          AND c.author NOT GLOB '*_[Bb]ot'
+        ))""".format(known=",".join(f"'{a}'" for a in _KNOWN_BOT_AUTHORS))
 
-    positive = conn.execute("""
-        SELECT c.id as comment_id, c.body, c.post_id, p.title as post_title, p.subreddit, c.sentiment
-        FROM comments c JOIN posts p ON p.id = c.post_id
-        JOIN medication_mentions mm ON mm.post_id = p.id
-        WHERE c.sentiment > 0.2
-          AND c.id NOT IN (SELECT comment_id FROM sentiment_votes WHERE validator = ?)
+    # --- Tier 1: Core items (no retirement cap) ---
+    core_pool = conn.execute(f"""
+        SELECT DISTINCT c.id as comment_id, substr(c.body, 1, 2000) as body, c.post_id,
+               p.title as post_title, p.subreddit, c.sentiment as system_score, c.created_utc
+        FROM comments c
+        JOIN validation_core_items vci ON vci.item_id = c.id AND vci.facet = 'sentiment'
+        JOIN posts p ON p.id = c.post_id
+        JOIN medication_mentions m ON m.post_id = p.id
+        WHERE c.id NOT IN (SELECT comment_id FROM sentiment_votes WHERE validator = ?)
+          AND c.sentiment IS NOT NULL
           AND length(c.body) > 20
-        ORDER BY RANDOM() LIMIT 1
+          {bot_exclude}
     """, (validator,)).fetchall()
+    core_sample = _time_stratified_sample(core_pool, min(3, len(core_pool)))
 
-    random_extra = conn.execute("""
-        SELECT c.id as comment_id, c.body, c.post_id, p.title as post_title, p.subreddit, c.sentiment
+    # --- Tier 2: Exploration items (retire after 2 votes, sentiment-balanced) ---
+    remaining = count - len(core_sample)
+    explore_cap = "AND (SELECT COUNT(*) FROM sentiment_votes WHERE comment_id = c.id) < 2"
+    core_exclude = "AND c.id NOT IN (SELECT item_id FROM validation_core_items WHERE facet = 'sentiment')"
+    base = f"""
+        SELECT DISTINCT c.id as comment_id, substr(c.body, 1, 2000) as body, c.post_id,
+               p.title as post_title, p.subreddit, c.sentiment as system_score, c.created_utc
         FROM comments c JOIN posts p ON p.id = c.post_id
-        JOIN medication_mentions mm ON mm.post_id = p.id
-        WHERE c.sentiment IS NOT NULL
-          AND c.id NOT IN (SELECT comment_id FROM sentiment_votes WHERE validator = ?)
+        JOIN medication_mentions m ON m.post_id = p.id
+        WHERE c.id NOT IN (SELECT comment_id FROM sentiment_votes WHERE validator = ?)
+          AND c.sentiment IS NOT NULL
           AND length(c.body) > 20
-        ORDER BY RANDOM() LIMIT 2
-    """, (validator,)).fetchall()
+          {explore_cap}
+          {core_exclude}
+          {bot_exclude}
+    """
 
-    result = []
-    for r in list(negative) + list(neutral) + list(positive) + list(random_extra):
-        result.append({
+    # Sentiment-balanced: 1 neg (1-2) + 1 neutral (3) + 1 pos (4-5) + rest random
+    neg_pool = conn.execute(base + " AND c.sentiment <= 2 LIMIT 50", (validator,)).fetchall()
+    neut_pool = conn.execute(base + " AND c.sentiment = 3 LIMIT 50", (validator,)).fetchall()
+    pos_pool = conn.execute(base + " AND c.sentiment >= 4 LIMIT 50", (validator,)).fetchall()
+
+    negative = _time_stratified_sample(neg_pool, 1)
+    neutral = _time_stratified_sample(neut_pool, 1)
+    positive = _time_stratified_sample(pos_pool, 1)
+
+    got = list(negative) + list(neutral) + list(positive)
+    got_ids = {r['comment_id'] for r in got}
+    explore_remaining = remaining - len(got)
+
+    if explore_remaining > 0:
+        exclude = ','.join('?' * len(got_ids)) if got_ids else "''"
+        extra_sql = base + (f" AND c.id NOT IN ({exclude})" if got_ids else "") + " LIMIT 300"
+        extra_params = (validator, *list(got_ids)) if got_ids else (validator,)
+        extra_pool = conn.execute(extra_sql, extra_params).fetchall()
+        got = got + _time_stratified_sample(extra_pool, explore_remaining)
+
+    result = list(core_sample) + got
+    _random.shuffle(result)
+    return [
+        {
             "comment_id": r["comment_id"], "body": r["body"],
             "post_id": r["post_id"], "post_title": r["post_title"],
-            "subreddit": r["subreddit"], "system_score": r["sentiment"],
-        })
-    return result
+            "subreddit": r["subreddit"], "system_score": r["system_score"],
+        }
+        for r in result
+    ]
 
 
 def save_sentiment_votes(conn: sqlite3.Connection, validator: str, votes: list) -> None:

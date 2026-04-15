@@ -247,16 +247,27 @@ table.explorer tr.expanded-row td{padding:12px 16px}
 .vote-btn.yes{border-color:var(--green)}.vote-btn.yes.selected{background:var(--green)}
 .vote-btn.no{border-color:var(--red)}.vote-btn.no.selected{background:var(--red)}
 .likert-btn{min-width:40px;text-align:center}
-.likert-btn[data-score="-1"]{border-color:var(--red)}.likert-btn[data-score="-1"].selected{background:var(--red)}
-.likert-btn[data-score="-0.5"]{border-color:#f09060}.likert-btn[data-score="-0.5"].selected{background:#f09060}
-.likert-btn[data-score="0"]{border-color:var(--muted)}.likert-btn[data-score="0"].selected{background:var(--muted)}
-.likert-btn[data-score="0.5"]{border-color:#80c080}.likert-btn[data-score="0.5"].selected{background:#80c080}
-.likert-btn[data-score="1"]{border-color:var(--green)}.likert-btn[data-score="1"].selected{background:var(--green)}
+.likert-btn[data-score="1"]{border-color:var(--red)}.likert-btn[data-score="1"].selected{background:var(--red)}
+.likert-btn[data-score="2"]{border-color:#f09060}.likert-btn[data-score="2"].selected{background:#f09060}
+.likert-btn[data-score="3"]{border-color:var(--muted)}.likert-btn[data-score="3"].selected{background:var(--muted)}
+.likert-btn[data-score="4"]{border-color:#80c080}.likert-btn[data-score="4"].selected{background:#80c080}
+.likert-btn[data-score="5"]{border-color:var(--green)}.likert-btn[data-score="5"].selected{background:var(--green)}
 .val-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:16px}
 .val-stat{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px;text-align:center}
 .val-stat .val{font-size:20px;font-weight:700;color:var(--accent)}.val-stat .lbl{font-size:11px;color:var(--muted)}
-.checkbox-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:4px;margin-bottom:8px}
-.checkbox-grid label{font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer}
+.se-checkbox-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.3rem .8rem;margin:.5rem 0}
+.se-checkbox-grid label{font-size:.75rem;display:flex;align-items:center;gap:.3rem;cursor:pointer}.se-checkbox-grid input[type=checkbox]{accent-color:var(--accent)}
+.se-other-row{display:flex;align-items:center;gap:.5rem;margin-top:.4rem}
+.se-other-row input[type=text]{flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:.3rem .6rem;border-radius:6px;font-size:.75rem}
+.se-none-btn{padding:.3rem 1rem;border-radius:6px;font-size:.75rem;font-weight:600;cursor:pointer;background:var(--bg);border:2px solid var(--border);color:var(--muted);transition:all .2s;margin-top:.5rem}
+.se-none-btn:hover{border-color:var(--muted)}
+.se-none-btn.confirmed{border-color:var(--green);color:var(--green);background:rgba(74,222,128,0.1)}
+.pipeline-toggle{display:flex;align-items:center;gap:.35rem;cursor:pointer;user-select:none}
+.pl-label{font-size:.75rem;color:var(--muted);transition:font-weight .15s}
+.pl-slider{position:relative;display:inline-block;width:2.2rem;height:1.1rem;background:var(--border);border-radius:1rem;cursor:pointer;transition:background .2s}
+.pl-slider::after{content:'';position:absolute;top:.15rem;left:.15rem;width:.8rem;height:.8rem;background:#fff;border-radius:50%;transition:transform .2s}
+.pl-slider.on{background:#a070e0}
+.pl-slider.on::after{transform:translateX(1.1rem)}
 /* Feedback tab */
 .feedback-wrap{max-width:600px;margin:0 auto}
 .feedback-compose{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:20px}
@@ -309,6 +320,14 @@ table.heatmap .row-label{text-align:right;color:var(--muted);white-space:nowrap;
     <span class="date-label">To</span><input type="date" id="dateTo" onchange="saveState();loadAll()">
   </span>
   <button class="preset-btn" onclick="document.getElementById('customDateWrap').style.display='inline'">Custom</button>
+  <label class="pipeline-toggle" title="Toggle between Regex and AI pipeline">
+    <span class="pl-label" id="plLabelRegex">Regex</span>
+    <input type="checkbox" id="pipelineToggle" onchange="togglePipeline(this.checked)" style="display:none">
+    <span class="pl-slider" id="plSlider" onclick="document.getElementById('pipelineToggle').click()"></span>
+    <span class="pl-label" id="plLabelAI">AI</span>
+    <span id="plBadge" style="display:none;background:#a070e0;color:#fff;font-size:.65rem;padding:.1rem .35rem;border-radius:.25rem;vertical-align:middle;margin-left:.25rem">AI</span>
+  </label>
+  <button class="scrape-btn" onclick="exportCSV()" style="background:var(--surface);color:var(--text);border:1px solid var(--border)">Export CSV</button>
   <button class="scrape-btn" id="scrapeBtn" onclick="triggerScrape()">Scrape Now</button>
 </header>
 
@@ -480,7 +499,7 @@ table.heatmap .row-label{text-align:right;color:var(--muted);white-space:nowrap;
   <h2>Post Explorer</h2>
   <div class="explorer-controls">
     <select id="explorerType"><option value="">Select medication...</option></select>
-    <button onclick="loadPosts()">Load Posts</button>
+    <button onclick="loadPosts(false)">Load Posts</button>
   </div>
   <div id="explorerTable"><div class="empty">Select a medication and click Load Posts</div></div>
 </div>
@@ -866,23 +885,59 @@ async function loadAll(){
   }catch(e){console.error('loadAll failed:',e)}
 }
 
+// ==================== PIPELINE TOGGLE ====================
+function togglePipeline(useAI, skipReload){
+  localStorage.setItem('pipeline', useAI?'ai':'regex');
+  const tog=document.getElementById('pipelineToggle');
+  if(tog) tog.checked=useAI;
+  const slider=document.getElementById('plSlider');
+  if(slider){ if(useAI) slider.classList.add('on'); else slider.classList.remove('on'); }
+  document.getElementById('plLabelRegex').style.fontWeight=useAI?'400':'700';
+  document.getElementById('plLabelAI').style.fontWeight=useAI?'700':'400';
+  document.getElementById('plBadge').style.display=useAI?'inline':'none';
+  if(!skipReload) loadAll();
+}
+
+function exportCSV(){
+  const a=document.createElement('a');
+  a.href='/api/export?'+qp();
+  a.click();
+}
+
 // ==================== POST EXPLORER ====================
-async function loadPosts(){
-  const type = document.getElementById('explorerType').value;
-  if(!type){return}
-  const q = qp() + 'medication=' + encodeURIComponent(type) + '&limit=20';
-  const posts = await fetch('/api/posts?'+q).then(r=>r.json());
-  if(!posts.length){document.getElementById('explorerTable').innerHTML='<div class="empty">No posts found</div>';return}
-  let html = '<table class="explorer"><thead><tr><th>Post</th><th>Sub</th><th>Sent</th><th>Fear</th><th>Peds</th><th>Eng</th></tr></thead><tbody>';
-  for(const p of posts){
-    const sc = p.sentiment!=null ? (p.sentiment>0.1?'pos':p.sentiment<-0.1?'neg':'neu') : 'neu';
-    const fc = p.fear_score!=null && p.fear_score>0.3 ? 'fear' : 'neu';
-    const pc = p.pediatric_confidence==='definite'?'definite':p.pediatric_confidence==='likely'?'likely':'neu';
-    html += `<tr onclick="toggleExp(this,'${p.id}')" style="cursor:pointer"><td>${esc(p.title).slice(0,80)}</td><td><span class="pill">${p.subreddit||''}</span></td><td><span class="pill ${sc}">${p.sentiment!=null?p.sentiment.toFixed(2):'—'}</span></td><td><span class="pill ${fc}">${p.fear_score!=null?p.fear_score.toFixed(2):'—'}</span></td><td><span class="pill ${pc}">${p.pediatric_confidence||'—'}</span></td><td>${(p.engagement_score||0).toFixed(1)}</td></tr>`;
-    html += `<tr class="expanded-row" style="display:none" id="exp-${p.id}"><td colspan="6"><div class="post-text">${esc(p.selftext||'').slice(0,500)}</div><div id="comments-${p.id}"></div></td></tr>`;
-  }
-  html += '</tbody></table>';
-  document.getElementById('explorerTable').innerHTML = html;
+let explorerOffset=0;
+let explorerType='';
+
+async function loadPosts(more){
+  const type=document.getElementById('explorerType').value;
+  if(!type) return;
+  const el=document.getElementById('explorerTable');
+  if(!more||type!==explorerType){explorerOffset=0;explorerType=type;el.innerHTML='<div class="empty">Loading...</div>';}
+  try{
+    const posts=await fetch('/api/posts?medication='+encodeURIComponent(type)+'&limit=30&offset='+explorerOffset+'&'+qp()).then(r=>r.json());
+    if(!posts.length&&explorerOffset===0){el.innerHTML='<div class="empty">No posts found</div>';return;}
+    let h='';
+    if(explorerOffset===0) h='<table class="explorer" id="explorerTbl"><thead><tr><th>Post</th><th>Sub</th><th>Sent</th><th>Fear</th><th>Peds</th><th>Eng</th></tr></thead><tbody>';
+    for(const p of posts){
+      const sc=p.sentiment!=null?(p.sentiment>3?'pos':p.sentiment<3?'neg':'neu'):'neu';
+      const fc=p.fear_score!=null&&p.fear_score>0.3?'fear':'neu';
+      const pc=p.pediatric_confidence==='definite'?'definite':p.pediatric_confidence==='likely'?'likely':'neu';
+      h+=`<tr onclick="toggleExp(this,'${p.id}')" style="cursor:pointer"><td>${esc(p.title).slice(0,80)}</td><td><span class="pill">${p.subreddit||''}</span></td><td><span class="pill ${sc}">${p.sentiment!=null?p.sentiment:'—'}</span></td><td><span class="pill ${fc}">${p.fear_score!=null?p.fear_score.toFixed(2):'—'}</span></td><td><span class="pill ${pc}">${p.pediatric_confidence||'—'}</span></td><td>${(p.engagement_score||0).toFixed(1)}</td></tr>`;
+      h+=`<tr class="expanded-row" style="display:none" id="exp-${p.id}"><td colspan="6"><div class="post-text">${esc(p.selftext||'').slice(0,500)}</div><div id="comments-${p.id}"></div></td></tr>`;
+    }
+    explorerOffset+=posts.length;
+    if(explorerOffset===posts.length){
+      h+='</tbody></table>';
+      if(posts.length>=30) h+=`<div style="text-align:center;margin-top:.75rem"><button class="vote-btn" onclick="loadPosts(true)">Load 30 more</button></div>`;
+      el.innerHTML=h;
+    }else{
+      const tbl=document.getElementById('explorerTbl');
+      if(tbl){tbl.querySelector('tbody').insertAdjacentHTML('beforeend',h);}
+      const oldBtn=el.querySelector('div[style*="text-align:center"]');
+      if(oldBtn) oldBtn.remove();
+      if(posts.length>=30) el.insertAdjacentHTML('beforeend',`<div style="text-align:center;margin-top:.75rem"><button class="vote-btn" onclick="loadPosts(true)">Load 30 more</button></div>`);
+    }
+  }catch(e){if(explorerOffset===0) el.innerHTML='<div class="empty">Error loading posts</div>';}
 }
 
 async function toggleExp(row, postId){
@@ -946,14 +1001,37 @@ async function loadSEStats(){
 async function loadSEBatch(){
   const v = document.getElementById('validatorName').value || 'anon';
   seBatch = await fetch('/api/validation/side-effects/batch?validator='+encodeURIComponent(v)).then(r=>r.json());
-  document.getElementById('seBatch').innerHTML = seBatch.map((c,i) => `<div class="val-card"><div class="val-title">${esc(c.post_title)} <span class="pill">${c.subreddit}</span></div><div class="val-text">${esc(c.body)}</div><div class="checkbox-grid" id="se-checks-${i}">${EFFECTS_LIST.map(e=>`<label><input type="checkbox" value="${e}"> ${e}</label>`).join('')}</div><input placeholder="Something else..." style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 8px;font-size:12px;width:200px;margin-top:4px" id="se-other-${i}"></div>`).join('');
+  document.getElementById('seBatch').innerHTML = seBatch.map((c,i) => `<div class="val-card"><div class="val-title">${esc(c.post_title)} <span class="pill">${c.subreddit}</span></div><div class="val-text">${esc(c.body)}</div><div style="font-size:.8rem;font-weight:600;margin-bottom:.3rem">Which side effects are mentioned?</div><div class="se-checkbox-grid" id="se-checks-${i}">${EFFECTS_LIST.map(e=>`<label><input type="checkbox" value="${esc(e)}" onchange="onSECheck(${i})"> ${esc(e)}</label>`).join('')}</div><div class="se-other-row"><label style="font-size:.75rem;white-space:nowrap"><input type="checkbox" id="se-other-toggle-${i}" onchange="onSEOtherToggle(${i})"> Something else:</label><input type="text" id="se-other-text-${i}" placeholder="Describe effect..." disabled oninput="onSECheck(${i})"></div><div style="margin-top:.5rem"><button class="se-none-btn" id="se-none-${i}" onclick="confirmNoEffects(${i})">None found</button></div></div>`).join('');
+}
+
+function onSECheck(idx){
+  document.getElementById('se-none-'+idx).classList.remove('confirmed');
+}
+
+function onSEOtherToggle(idx){
+  const toggle=document.getElementById('se-other-toggle-'+idx);
+  const textInput=document.getElementById('se-other-text-'+idx);
+  textInput.disabled=!toggle.checked;
+  if(!toggle.checked) textInput.value='';
+  onSECheck(idx);
+}
+
+function confirmNoEffects(idx){
+  const grid=document.getElementById('se-checks-'+idx);
+  grid.querySelectorAll('input[type=checkbox]').forEach(cb=>{cb.checked=false;});
+  const otherToggle=document.getElementById('se-other-toggle-'+idx);
+  if(otherToggle){otherToggle.checked=false;}
+  const otherText=document.getElementById('se-other-text-'+idx);
+  if(otherText){otherText.value='';otherText.disabled=true;}
+  document.getElementById('se-none-'+idx).classList.add('confirmed');
 }
 
 async function submitSEVotes(){
   const v = document.getElementById('validatorName').value || 'anon';
   const votes = seBatch.map((c,i) => {
-    const checks = [...document.querySelectorAll('#se-checks-'+i+' input:checked')].map(cb=>cb.value);
-    const other = document.getElementById('se-other-'+i)?.value||'';
+    const checks = [...document.querySelectorAll('#se-checks-'+i+' input[type=checkbox]:checked')].map(cb=>cb.value);
+    const otherToggle=document.getElementById('se-other-toggle-'+i);
+    const other=(otherToggle&&otherToggle.checked)?(document.getElementById('se-other-text-'+i)?.value||''):'';
     return {comment_id:c.comment_id, human_effects:checks, other_effect:other};
   });
   await fetch('/api/validation/side-effects/votes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({validator:v,votes})});
@@ -969,7 +1047,7 @@ async function loadSentStats(){
 async function loadSentBatch(){
   const v = document.getElementById('validatorName').value || 'anon';
   sentBatchData = await fetch('/api/validation/sentiment/batch?validator='+encodeURIComponent(v)).then(r=>r.json());
-  document.getElementById('sentBatch').innerHTML = sentBatchData.map((c,i) => `<div class="val-card"><div class="val-title">${esc(c.post_title)} <span class="pill">${c.subreddit}</span></div><div class="val-text">${esc(c.body)}</div><div class="val-actions" id="sent-btns-${i}">${[[-1,'V.Neg'],[-0.5,'Neg'],[0,'Neutral'],[0.5,'Pos'],[1,'V.Pos']].map(([s,l])=>`<button class="vote-btn likert-btn" data-score="${s}" onclick="selectLikert(${i},${s},this)">${l}</button>`).join('')}</div></div>`).join('');
+  document.getElementById('sentBatch').innerHTML = sentBatchData.map((c,i) => `<div class="val-card"><div class="val-title">${esc(c.post_title)} <span class="pill">${c.subreddit}</span></div><div class="val-text">${esc(c.body)}</div><div class="val-actions" id="sent-btns-${i}">${[[1,'Very Negative (1)'],[2,'Negative (2)'],[3,'Neutral (3)'],[4,'Positive (4)'],[5,'Very Positive (5)']].map(([s,l])=>`<button class="vote-btn likert-btn" data-score="${s}" onclick="selectLikert(${i},${s},this)">${l}</button>`).join('')}</div></div>`).join('');
 }
 
 function selectLikert(idx, score, btn){
@@ -1025,6 +1103,8 @@ window.addEventListener('hashchange', ()=>{loadState();loadAll()});
 document.addEventListener('DOMContentLoaded', ()=>{
   const v = localStorage.getItem('asthma_validator');
   if(v) document.getElementById('validatorName').value = v;
+  const pl = localStorage.getItem('pipeline') || 'regex';
+  togglePipeline(pl === 'ai', true);
   if(!loadState()) setPreset(0);
   else loadAll();
 });
@@ -1069,6 +1149,15 @@ class Handler(BaseHTTPRequestHandler):
         body = html.encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _csv_response(self, csv_text: str, filename: str):
+        body = csv_text.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/csv; charset=utf-8")
+        self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -1229,12 +1318,13 @@ class Handler(BaseHTTPRequestHandler):
 
         elif path == "/api/posts":
             med = params.get("medication", [None])[0]
-            limit = int(params.get("limit", [20])[0])
+            limit = int(params.get("limit", [30])[0])
+            offset = int(params.get("offset", [0])[0])
             if not med:
                 self._json([])
                 return
             conn = tracker.get_db()
-            data = tracker.query_top_posts(conn, med, limit=limit, date_from=df, date_to=dt, subreddit=sv)
+            data = tracker.query_top_posts(conn, med, limit=limit, offset=offset, date_from=df, date_to=dt, subreddit=sv)
             conn.close()
             self._json(data)
 
@@ -1269,6 +1359,61 @@ class Handler(BaseHTTPRequestHandler):
             data = tracker.query_recent_errors(conn, limit=limit)
             conn.close()
             self._json(data)
+
+        elif path == "/api/export":
+            conn = tracker.get_db()
+            clauses, args = [], []
+            if df:
+                clauses.append("p.created_utc >= ?"); args.append(df)
+            if dt:
+                clauses.append("p.created_utc <= ?"); args.append(dt)
+            if sv:
+                clauses.append("p.subreddit = ?"); args.append(sv)
+            where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+            rows = conn.execute(f"""
+                SELECT p.id, p.title, p.selftext, p.created_utc, p.score,
+                       p.num_comments, p.subreddit, p.sentiment, p.fear_score,
+                       p.engagement_score, p.pediatric_confidence, p.child_age_mentioned,
+                       p.permalink, p.location,
+                       GROUP_CONCAT(DISTINCT mm.medication) as medications,
+                       GROUP_CONCAT(DISTINCT se.effect) as side_effects,
+                       GROUP_CONCAT(DISTINCT tb.belief || ' [' || COALESCE(tb.stance,'unclear') || ']') as beliefs,
+                       GROUP_CONCAT(DISTINCT ed.category) as ed_categories
+                FROM posts p
+                LEFT JOIN medication_mentions mm ON mm.post_id = p.id
+                LEFT JOIN side_effects se ON se.source_type='post' AND se.source_id = p.id
+                LEFT JOIN treatment_beliefs tb ON tb.source_type='post' AND tb.source_id = p.id
+                LEFT JOIN ed_discourse ed ON ed.source_type='post' AND ed.source_id = p.id
+                {where}
+                GROUP BY p.id
+                ORDER BY p.created_utc DESC
+            """, args).fetchall()
+            conn.close()
+            import csv
+            import io
+            from datetime import timezone
+            out = io.StringIO()
+            w = csv.writer(out)
+            w.writerow(["id", "title", "selftext", "created_utc", "date",
+                        "score", "num_comments", "subreddit", "sentiment", "fear_score",
+                        "engagement_score", "pediatric_confidence", "child_age_mentioned",
+                        "permalink", "location", "medications", "side_effects",
+                        "beliefs", "ed_categories"])
+            for r in rows:
+                ts = r["created_utc"] or 0
+                date_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d") if ts > 0 else ""
+                w.writerow([
+                    r["id"], r["title"], (r["selftext"] or "")[:500],
+                    r["created_utc"], date_str, r["score"], r["num_comments"],
+                    r["subreddit"], r["sentiment"], r["fear_score"],
+                    r["engagement_score"], r["pediatric_confidence"], r["child_age_mentioned"],
+                    "https://reddit.com" + r["permalink"] if r["permalink"] else "",
+                    r["location"] or "",
+                    r["medications"] or "", r["side_effects"] or "",
+                    r["beliefs"] or "", r["ed_categories"] or "",
+                ])
+            fname = "asthma-tracker-export-" + datetime.now().strftime("%Y-%m-%d") + ".csv"
+            self._csv_response(out.getvalue(), fname)
 
         elif path == "/api/scrape-log":
             limit = int(params.get("limit", [20])[0])
