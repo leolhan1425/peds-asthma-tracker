@@ -1252,7 +1252,7 @@ def get_db(path: Optional[Path] = None) -> sqlite3.Connection:
     for tbl in ('posts', 'comments'):
         conn.execute(f"""
             UPDATE {tbl} SET sentiment = ROUND(sentiment * 2 + 3)
-            WHERE sentiment IS NOT NULL AND sentiment >= -1.0 AND sentiment <= 1.0
+            WHERE sentiment IS NOT NULL AND sentiment >= -1.0 AND sentiment < 1.0
         """)
     conn.commit()
     conn.row_factory = sqlite3.Row
