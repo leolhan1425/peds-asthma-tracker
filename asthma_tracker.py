@@ -796,15 +796,18 @@ _COMPILED_POST_ED_OUTCOME = {name: re.compile(pat, re.IGNORECASE) for name, pat 
 
 _POSITIVE_WORDS = {
     "love", "loved", "loving", "great", "amazing", "wonderful", "fantastic",
-    "happy", "happier", "recommend", "recommended", "perfect", "relief",
+    "happy", "happier", "recommend", "perfect", "relief",
     "comfortable", "easy", "easier", "helped", "helping", "helpful", "works", "worked",
     "effective", "glad", "satisfied", "awesome", "excellent", "best", "better",
     "worth", "grateful", "thankful", "thrilled", "pleased", "enjoy", "enjoying",
-    "improvement", "improved", "freedom", "convenient", "reliable", "safe",
-    "success", "successful", "smooth", "positive", "hopeful", "reassuring",
-    "welcome", "nice", "fine", "support", "supportive", "hope", "calm",
-    "reassured", "trust", "confident", "normal", "healthy", "controlled",
+    "improvement", "improved", "freedom", "convenient", "reliable",
+    "success", "successful", "smooth", "hopeful", "reassuring",
+    "welcome", "nice", "support", "supportive", "hope", "calm",
+    "reassured", "trust", "confident", "healthy", "controlled",
     "manageable", "stable", "responded", "breakthrough",
+    # Removed: "fine"/"normal"/"safe" (anxiety-framed questions: "is this normal?", "is she fine?")
+    # Removed: "positive" (false positive: "tested positive for RSV")
+    # Removed: "recommended" (clinical neutrals: "recommended dose", "recommended by protocol")
 }
 
 _NEGATIVE_WORDS = {
@@ -820,6 +823,14 @@ _NEGATIVE_WORDS = {
     "wtf", "unfair", "ridiculous", "gross", "mad", "ugh", "crazy",
     "stupid", "disgusting", "horrifying", "dreadful", "desperate",
     "dangerous", "toxic", "terrifying", "exhausting", "helpless",
+    # Caregiver-voice distress vocabulary (translated from bc-tracker iter 2+3;
+    # adult/relationship-specific terms excluded: abusive, assaulted, harassed, violated)
+    "exhausted", "overwhelmed", "defeated", "hopeless", "trapped",
+    "devastated", "heartbroken", "traumatic",
+    "numb", "drained", "shattered", "isolated",
+    "terrified", "panicking", "panicked", "dreading",
+    "frustration", "rant", "vent", "venting",
+    # Adult-patient-only terms removed: "creepy", "sketchy" (bc-tracker contraception-specific)
 }
 
 _FEAR_WORDS = {
@@ -832,6 +843,16 @@ _FEAR_WORDS = {
     "oxygen", "intubat", "icu", "life threatening", "life-threatening",
     "dying", "die", "death", "hospital", "er", "ptsd", "trauma",
     "worst night", "scariest", "helpless", "powerless",
+    # Caregiver-voice emergency language (watching a child in distress)
+    "rushed to the er", "rushed to hospital", "rushed to emergency",
+    "rush to the er", "rush to hospital",
+    "watching him struggle", "watching her struggle", "watching my child struggle",
+    "watching him breathe", "watching her breathe", "watching my kid breathe",
+    "counting breaths", "counting his breaths", "counting her breaths",
+    "ribs showing", "can see his ribs", "can see her ribs",
+    "chest pulling in", "chest retracting",
+    "stridor",
+    "called 911", "called an ambulance",
 }
 
 _INTENSIFIERS = {"very", "really", "extremely", "so", "incredibly", "super", "absolutely", "totally"}
