@@ -494,6 +494,19 @@ table.heatmap .row-label{text-align:right;color:var(--muted);white-space:nowrap;
   <div id="careEdBars" class="bar-rows"></div>
 </div>
 
+<!-- Chart 13: AI Health Topics (shown only in AI mode) -->
+<div class="card" id="healthTopicsCard" style="display:none">
+  <h2>Asthma Health Topics <button class="methods-btn" onclick="toggleMethods('m-htopics')">Methods</button></h2>
+  <div class="methods-box" id="m-htopics">AI-extracted health topic themes from caregiver posts. 12 user-approved themes: School Impact, Sleep Disruption, ER/Hospital, Trigger Management, Growth/Development, Sports/Activity, Parental Burden, Medication Adherence, Diagnosis Journey, Seasonal Patterns, Caregiver/Sibling Impact, Psychosocial. Only available in AI pipeline mode.</div>
+  <div id="healthTopicsBars" class="bar-rows"></div>
+</div>
+
+<!-- Chart 14: AI Pipeline Status (shown only in AI mode) -->
+<div class="card" id="aiStatusCard" style="display:none">
+  <h2>AI Pipeline Status</h2>
+  <div id="aiStatusContent" class="bar-rows"></div>
+</div>
+
 <!-- Post Explorer -->
 <div class="card full" id="explorerCard">
   <h2>Post Explorer</h2>
@@ -553,6 +566,7 @@ function qp(){
   if(f) q += 'from='+f+'&';
   if(t) q += 'to='+t+'&';
   if(s) q += 'sub='+s+'&';
+  if(localStorage.getItem('pipeline') === 'ai') q += 'source=ai&';
   return q;
 }
 
@@ -723,6 +737,10 @@ function renderLineChart(canvasId, dailyData, key, showSeasons){
 // ==================== LOAD ALL ====================
 async function loadAll(){
   const q = qp();
+  const useAI = localStorage.getItem('pipeline') === 'ai';
+  // Show/hide AI-only charts
+  document.getElementById('healthTopicsCard').style.display = useAI ? '' : 'none';
+  document.getElementById('aiStatusCard').style.display = useAI ? '' : 'none';
   try{
     const [meds, medSent, medDaily, edCounts, edDaily, beliefs, beliefStance, trigs, trigDaily, care, careDaily, singEffects, singDaily, singDisc, corticoEffects, corticoDaily, funcImpact, funcDaily, inhConf, inhConfDaily, edSubcats, careEd, edOutcome, stats] = await Promise.all([
       fetch('/api/medications?'+q).then(r=>r.json()),
@@ -881,6 +899,26 @@ async function loadAll(){
     const curVal = sel.value;
     sel.innerHTML = '<option value="">Select medication...</option>' + (meds.medications||[]).map(([n]) => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
     if(curVal) sel.value = curVal;
+
+    // AI-only: health topics + pipeline status
+    if(useAI){
+      try{
+        const htData = await fetch('/api/health-topics?'+q).then(r=>r.json());
+        const htItems = (htData||[]).map(([name,cnt]) => [name, cnt, 'default']);
+        renderBars(document.getElementById('healthTopicsBars'), htItems, 0, null);
+      }catch(e){ document.getElementById('healthTopicsBars').innerHTML='<div class="empty">No AI data yet. Run: python3 ai_pipeline.py pilot --sample 100</div>'; }
+      try{
+        const aiSt = await fetch('/api/pipeline-status').then(r=>r.json());
+        const el = document.getElementById('aiStatusContent');
+        el.innerHTML = `<div style="color:var(--muted);font-size:13px;line-height:1.7">
+          <div>Items processed: <strong>${aiSt.items_processed||0}</strong></div>
+          <div>Prompt version: <strong>${aiSt.prompt_version||'—'}</strong></div>
+          <div>Total cost: <strong>$${(aiSt.cost_total||0).toFixed(4)}</strong></div>
+          <div>Model: <strong>${aiSt.model||'claude-haiku-4-5-20251001'}</strong></div>
+          <div style="margin-top:8px;font-size:11px;color:var(--muted)">Run <code>python3 ai_pipeline.py pilot --sample 500</code> to populate AI data.</div>
+        </div>`;
+      }catch(e){}
+    }
 
   }catch(e){console.error('loadAll failed:',e)}
 }
@@ -1115,6 +1153,122 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
 
 # ---------------------------------------------------------------------------
+# AI Pipeline query helpers (used by HTTP handler)
+# ---------------------------------------------------------------------------
+
+def _ai_query_medication_counts(conn, date_from=None, date_to=None, subreddit=None):
+    """Return [[med_name, count, class], ...] from ai_medication_mentions table."""
+    clauses, args = [], []
+    join = ""
+    if date_from or date_to or subreddit:
+        join = "JOIN posts p ON am.post_id = p.id"
+        if date_from:
+            clauses.append("p.created_utc >= ?"); args.append(date_from)
+        if date_to:
+            clauses.append("p.created_utc <= ?"); args.append(date_to)
+        if subreddit:
+            clauses.append("p.subreddit = ?"); args.append(subreddit)
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    try:
+        rows = conn.execute(
+            f"SELECT am.medication, COUNT(*) as cnt, am.med_class "
+            f"FROM ai_medication_mentions am {join} {where} "
+            f"GROUP BY am.medication ORDER BY cnt DESC",
+            args
+        ).fetchall()
+        return [[r["medication"], r["cnt"], r["med_class"] or ""] for r in rows]
+    except Exception:
+        return []
+
+
+def _ai_query_belief_counts(conn, date_from=None, date_to=None, subreddit=None):
+    """Return [[belief, count, stance_counts], ...] from ai_treatment_beliefs."""
+    clauses, args = [], []
+    join = ""
+    if date_from or date_to or subreddit:
+        join = "JOIN posts p ON (atb.source_type='post' AND atb.source_id=p.id)"
+        if date_from:
+            clauses.append("p.created_utc >= ?"); args.append(date_from)
+        if date_to:
+            clauses.append("p.created_utc <= ?"); args.append(date_to)
+        if subreddit:
+            clauses.append("p.subreddit = ?"); args.append(subreddit)
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    try:
+        rows = conn.execute(
+            f"SELECT atb.belief, COUNT(*) as cnt "
+            f"FROM ai_treatment_beliefs atb {join} {where} "
+            f"GROUP BY atb.belief ORDER BY cnt DESC",
+            args
+        ).fetchall()
+        return [[r["belief"], r["cnt"]] for r in rows]
+    except Exception:
+        return []
+
+
+def _query_health_topics(conn, date_from=None, date_to=None, subreddit=None):
+    """Return list of [topic, count] sorted by count desc."""
+    clauses, args = [], []
+    if date_from or date_to or subreddit:
+        # Join to posts to get date/subreddit filtering
+        joins = "JOIN posts p ON (ht.source_type = 'post' AND ht.source_id = p.id)"
+        if date_from:
+            clauses.append("p.created_utc >= ?"); args.append(date_from)
+        if date_to:
+            clauses.append("p.created_utc <= ?"); args.append(date_to)
+        if subreddit:
+            clauses.append("p.subreddit = ?"); args.append(subreddit)
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+        sql = f"""
+            SELECT ht.topic, COUNT(*) as cnt
+            FROM asthma_health_topics ht
+            {joins} {where}
+            GROUP BY ht.topic ORDER BY cnt DESC
+        """
+    else:
+        sql = """
+            SELECT topic, COUNT(*) as cnt
+            FROM asthma_health_topics
+            GROUP BY topic ORDER BY cnt DESC
+        """
+    try:
+        rows = conn.execute(sql, args).fetchall()
+        return [[r["topic"], r["cnt"]] for r in rows]
+    except Exception:
+        return []
+
+
+def _query_pipeline_status(conn):
+    """Return AI pipeline status: items processed, cost, prompt version, model."""
+    try:
+        items_row = conn.execute(
+            "SELECT COUNT(DISTINCT source_type || ':' || source_id) as n FROM ai_raw_responses"
+        ).fetchone()
+        items_processed = items_row["n"] if items_row else 0
+
+        cost_row = conn.execute(
+            "SELECT SUM(estimated_usd) as total FROM ai_cost_log"
+        ).fetchone()
+        cost_total = cost_row["total"] or 0.0 if cost_row else 0.0
+
+        pv_row = conn.execute(
+            "SELECT prompt_version FROM ai_raw_responses ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()
+        prompt_version = pv_row["prompt_version"] if pv_row else None
+
+        return {
+            "items_processed": items_processed,
+            "cost_total": cost_total,
+            "prompt_version": prompt_version,
+            "model": "claude-haiku-4-5-20251001",
+            "enabled": items_processed > 0,
+        }
+    except Exception:
+        return {"items_processed": 0, "cost_total": 0.0, "prompt_version": None,
+                "model": "claude-haiku-4-5-20251001", "enabled": False}
+
+
+# ---------------------------------------------------------------------------
 # HTTP Request Handler
 # ---------------------------------------------------------------------------
 
@@ -1171,13 +1325,17 @@ class Handler(BaseHTTPRequestHandler):
         params = parse_qs(parsed.query)
         df, dt = self._parse_dates(params)
         sv = params.get("sub", [None])[0] or None
+        use_ai = params.get("source", [None])[0] == "ai"
 
         if path == "/":
             self._html(HTML_PAGE)
 
         elif path == "/api/medications":
             conn = tracker.get_db()
-            meds = tracker.query_medication_counts(conn, date_from=df, date_to=dt, subreddit=sv)
+            if use_ai:
+                meds = _ai_query_medication_counts(conn, date_from=df, date_to=dt, subreddit=sv)
+            else:
+                meds = tracker.query_medication_counts(conn, date_from=df, date_to=dt, subreddit=sv)
             med_sent = tracker.query_medication_sentiment(conn, date_from=df, date_to=dt, subreddit=sv)
             med_daily = tracker.query_daily_medication_counts(conn, date_from=df, date_to=dt, subreddit=sv)
             stats = tracker.query_db_stats(conn, date_from=df, date_to=dt, subreddit=sv)
@@ -1210,7 +1368,10 @@ class Handler(BaseHTTPRequestHandler):
 
         elif path == "/api/beliefs":
             conn = tracker.get_db()
-            data = tracker.query_belief_counts(conn, date_from=df, date_to=dt, subreddit=sv)
+            if use_ai:
+                data = _ai_query_belief_counts(conn, date_from=df, date_to=dt, subreddit=sv)
+            else:
+                data = tracker.query_belief_counts(conn, date_from=df, date_to=dt, subreddit=sv)
             conn.close()
             self._json(data)
 
@@ -1473,6 +1634,28 @@ class Handler(BaseHTTPRequestHandler):
             data = tracker.query_feedback(conn, voter_id=vid)
             conn.close()
             self._json({"suggestions": data})
+
+        elif path == "/api/health-topics":
+            conn = tracker.get_db()
+            rows = _query_health_topics(conn, date_from=df, date_to=dt, subreddit=sv)
+            conn.close()
+            self._json(rows)
+
+        elif path == "/api/pipeline-status":
+            conn = tracker.get_db()
+            data = _query_pipeline_status(conn)
+            conn.close()
+            self._json(data)
+
+        elif path == "/api/pipeline-costs":
+            conn = tracker.get_db()
+            rows = conn.execute(
+                """SELECT timestamp, input_tokens, output_tokens, api_calls,
+                          estimated_usd, context
+                   FROM ai_cost_log ORDER BY timestamp DESC LIMIT 50"""
+            ).fetchall()
+            conn.close()
+            self._json([dict(r) for r in rows])
 
         else:
             self.send_response(404)

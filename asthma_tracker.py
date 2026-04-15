@@ -1256,6 +1256,116 @@ def get_db(path: Optional[Path] = None) -> sqlite3.Connection:
             item_type TEXT NOT NULL,
             PRIMARY KEY (facet, item_id)
         );
+
+        -- AI Pipeline tables (Phase 3)
+        CREATE TABLE IF NOT EXISTS ai_raw_responses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            prompt_version TEXT NOT NULL,
+            raw_response TEXT NOT NULL,
+            model TEXT NOT NULL,
+            input_tokens INTEGER,
+            output_tokens INTEGER,
+            estimated_usd REAL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_air_source
+            ON ai_raw_responses(source_type, source_id);
+        CREATE INDEX IF NOT EXISTS idx_air_prompt
+            ON ai_raw_responses(prompt_version);
+
+        CREATE TABLE IF NOT EXISTS ai_cost_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            input_tokens INTEGER,
+            output_tokens INTEGER,
+            api_calls INTEGER,
+            estimated_usd REAL,
+            context TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_cost_log_ts ON ai_cost_log(timestamp);
+
+        CREATE TABLE IF NOT EXISTS ai_medication_mentions (
+            post_id TEXT NOT NULL,
+            medication TEXT NOT NULL,
+            med_class TEXT,
+            novel INTEGER DEFAULT 0,
+            PRIMARY KEY (post_id, medication)
+        );
+        CREATE INDEX IF NOT EXISTS idx_ai_med_post ON ai_medication_mentions(post_id);
+        CREATE INDEX IF NOT EXISTS idx_ai_med_name ON ai_medication_mentions(medication);
+
+        CREATE TABLE IF NOT EXISTS ai_side_effects (
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            effect TEXT NOT NULL,
+            medication TEXT,
+            PRIMARY KEY (source_type, source_id, effect)
+        );
+
+        CREATE TABLE IF NOT EXISTS ai_treatment_beliefs (
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            belief TEXT NOT NULL,
+            stance TEXT DEFAULT 'unclear',
+            PRIMARY KEY (source_type, source_id, belief)
+        );
+
+        CREATE TABLE IF NOT EXISTS ai_ed_discourse (
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            category TEXT NOT NULL,
+            PRIMARY KEY (source_type, source_id, category)
+        );
+
+        CREATE TABLE IF NOT EXISTS ai_triggers (
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            trigger_name TEXT NOT NULL,
+            trigger_category TEXT,
+            PRIMARY KEY (source_type, source_id, trigger_name)
+        );
+
+        CREATE TABLE IF NOT EXISTS ai_caregiver_emotional_state (
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            category TEXT NOT NULL,
+            PRIMARY KEY (source_type, source_id, category)
+        );
+
+        CREATE TABLE IF NOT EXISTS ai_singulair_effects (
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            effect TEXT NOT NULL,
+            PRIMARY KEY (source_type, source_id, effect)
+        );
+
+        CREATE TABLE IF NOT EXISTS ai_functional_impact (
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            category TEXT NOT NULL,
+            PRIMARY KEY (source_type, source_id, category)
+        );
+
+        CREATE TABLE IF NOT EXISTS ai_inhaler_confusion (
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            category TEXT NOT NULL,
+            PRIMARY KEY (source_type, source_id, category)
+        );
+
+        -- 12 user-approved asthma health topic themes
+        CREATE TABLE IF NOT EXISTS asthma_health_topics (
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            topic TEXT NOT NULL,
+            PRIMARY KEY (source_type, source_id, topic)
+        );
+        CREATE INDEX IF NOT EXISTS idx_health_topics_topic
+            ON asthma_health_topics(topic);
+        CREATE INDEX IF NOT EXISTS idx_health_topics_source
+            ON asthma_health_topics(source_type, source_id);
     """)
     # Add ed_related column to caregiver_sentiment if not present
     try:
@@ -1268,6 +1378,19 @@ def get_db(path: Optional[Path] = None) -> sqlite3.Connection:
     except sqlite3.OperationalError:
         pass
     conn.execute("CREATE INDEX IF NOT EXISTS idx_posts_location ON posts(location)")
+    # Add AI pipeline columns to posts and comments
+    for _col, _tbl, _default in [
+        ("ai_analyzed", "posts", "INTEGER DEFAULT 0"),
+        ("ai_sentiment", "posts", "REAL"),
+        ("ai_fear_score", "posts", "REAL"),
+        ("ai_analyzed", "comments", "INTEGER DEFAULT 0"),
+        ("ai_sentiment", "comments", "REAL"),
+        ("ai_fear_score", "comments", "REAL"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN {_col} {_default}")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
     # --- Sentiment scale migration: float (-1/+1) → 1-5 Likert integer ---
     # Guard: only convert values still in [-1, 1] range (skip if already 1-5)
     for tbl in ('posts', 'comments'):
