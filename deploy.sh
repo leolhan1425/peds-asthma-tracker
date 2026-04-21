@@ -10,6 +10,7 @@ VPS_DIR="/opt/peds-asthma-tracker"
 FILES=(
     asthma_tracker.py
     asthma_tracker_web.py
+    ai_pipeline.py
     generate_site.py
     CLAUDE.md
     peds-asthma-tracker.service
